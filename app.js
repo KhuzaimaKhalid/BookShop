@@ -7,7 +7,7 @@ const app = express()
 
 const userRoutes = require('./routes/userRoutes.js')
 const categoriesRoutes = require("./routes/categoriesROutes.js")
-const productRoutes = require("./routes/productRoutes");
+const productRoutes = require("./routes/productsRoutes");
 const pagesRoutes = require("./routes/pagesRoutes");
 
 

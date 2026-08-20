@@ -1,5 +1,5 @@
 const express = require("express");
-const { createProduct, getAllProducts, getProductById, updateProduct, deleteProduct, updateStock, getLowStockProducts, getOutOfStockProducts, getProductsByCategory, searchProduct } = require("../controllers/productController");
+const { createProduct, getAllProducts, getProductById, updateProduct, deleteProduct, updateStock, getLowStockProducts, getOutOfStockProducts, getProductsByCategory, searchProduct } = require("../controllers/productsController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const adminMiddleware = require("../middlewares/adminMiddleware");
 const upload = require("../middlewares/uploadMiddleware");
