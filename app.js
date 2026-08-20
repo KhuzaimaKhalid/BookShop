@@ -1,16 +1,19 @@
 const express = require('express')
-const cors = require('cors')
 require('dotenv').config()
+const cors = require('cors')
 const { db, connectDB } = require('./config/connectDB.js')
 
 const app = express()
+
+const userRoutes = require('./routes/userRoutes.js')
 
 app.use(cors())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
+app.use('/api/users', userRoutes)
+
 const PORT = process.env.PORT
-connectDB();
 
 
 app.get('/', (req,res)=>{
