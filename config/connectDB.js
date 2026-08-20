@@ -1,8 +1,9 @@
-require("dotenv").config();
 const { createClient } = require("@libsql/client");
+require("dotenv").config();
 
 const client = createClient({
-    url: "file:BookShop.db",
+  url: process.env.TURSO_DATABASE_URL,
+  authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
 async function checkConnection() {
@@ -23,6 +24,8 @@ const parseArgs = (args) => {
   return args;
 };
 
+// Builds a prepare()-style interface bound to any executor
+// (either the top-level client, or an active transaction)
 function makePrepare(executor) {
   return (sql) => ({
     all: async (...args) => {
