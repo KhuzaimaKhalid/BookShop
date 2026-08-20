@@ -6,7 +6,7 @@ const { db, connectDB } = require('./config/connectDB.js')
 const app = express()
 
 const userRoutes = require('./routes/userRoutes.js')
-const categoriesRoutes = require("./routes/categoriesRoutes.js")
+const categoriesRoutes = require("./routes/categoriesROutes.js")
 const productRoutes = require("./routes/productRoutes");
 const pagesRoutes = require("./routes/pagesRoutes");
 
