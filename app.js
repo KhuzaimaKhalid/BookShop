@@ -6,12 +6,26 @@ const { db, connectDB } = require('./config/connectDB.js')
 const app = express()
 
 const userRoutes = require('./routes/userRoutes.js')
+const categoriesRoutes = require("./routes/categoriesROutes.js")
+const productRoutes = require("./routes/productRoutes");
+const pagesRoutes = require("./routes/pagesRoutes");
+
 
 app.use(cors())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
 app.use('/api/users', userRoutes)
+app.use("/user", userRoutes);
+
+app.use("/api/categories", categoriesRoutes);
+app.use("/categories", categoriesRoutes);
+
+app.use("/api/product", productRoutes);
+app.use("/product", productRoutes);
+
+app.use("/api/pages", pagesRoutes);
+app.use("/pages", pagesRoutes);
 
 const PORT = process.env.PORT
 
