@@ -84,6 +84,11 @@ const POSPage = () => {
     fetchInitialData();
   }, []);
 
+  // Reset category selection whenever the page header changes
+  useEffect(() => {
+    setSelectedCategoryId(null);
+  }, [selectedPageId]);
+
   const refreshProducts = async () => {
     try {
       const res = await api.get("/product");
@@ -98,6 +103,16 @@ const POSPage = () => {
     }
   };
 
+  // Filter Categories based on selected Page ID
+  const filteredCategories = useMemo(() => {
+    if (!selectedPageId) return categories;
+    return categories.filter((cat) => {
+      const catPageId = cat.page_id ?? cat.pageId ?? cat.page;
+      return String(catPageId) === String(selectedPageId);
+    });
+  }, [categories, selectedPageId]);
+
+  // Filter Products based on Category ID & Search Term
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
       const isActive = p.status ? p.status.toLowerCase() !== "inactive" : true;
@@ -261,7 +276,7 @@ const POSPage = () => {
 
       <div className="flex flex-1 relative overflow-hidden">
         <CategorySidebar
-          categories={categories}
+          categories={filteredCategories}
           selectedCategoryId={selectedCategoryId}
           onSelectCategory={setSelectedCategoryId}
           mobileOpen={mobileCategoryOpen}

@@ -70,7 +70,7 @@ const SignupForm = () => {
         </h2>
         <p className="text-sm text-slate-500 mt-2">
           {step === 1 
-            ? "Sign up to get started with ATR Automotive." 
+            ? "Sign up to get started with Learning Corner." 
             : `Enter the 6-digit verification code sent to ${email}`}
         </p>
       </div>
