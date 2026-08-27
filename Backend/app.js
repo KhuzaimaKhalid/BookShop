@@ -18,7 +18,7 @@ app.use(cors())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-app.use('/api/users', userRoutes)
+app.use('/api/user', userRoutes)
 app.use("/user", userRoutes);
 
 app.use("/api/categories", categoriesRoutes);
