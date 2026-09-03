@@ -12,6 +12,7 @@ const pagesRoutes = require("./routes/pagesRoutes");
 const salesRoutes = require("./routes/salesRoutes");
 const returnRoutes = require("./routes/returnRoutes");
 const reportRoutes = require("./routes/reportRoutes");
+const businessRoutes = require("./routes/businessRoutes");
 
 
 app.use(cors())
@@ -38,6 +39,9 @@ app.use("/return", returnRoutes);
 
 app.use("/api/report", reportRoutes);
 app.use("/report", reportRoutes);
+
+app.use("/api/business", businessRoutes);
+app.use("/business", businessRoutes);
 
 const PORT = process.env.PORT
 
