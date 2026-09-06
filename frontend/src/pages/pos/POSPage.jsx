@@ -6,16 +6,8 @@ import CategorySidebar from "../../components/pos/CategorySidebar";
 import CustomerTabs from "../../components/pos/CustomerTabs";
 import ProductGrid from "../../components/pos/ProductGrid";
 import CartPanel from "../../components/pos/CartPanel";
-
-const createEmptyCustomer = (name) => ({
-  id: `${Date.now()}-${Math.random()}`,
-  name,
-  items: [],
-  laborCharges: "",
-  paidAmount: "",
-  invoiceNo: null,
-  saleId: null,
-});
+import InvoiceModal from "../../components/sales/InvoiceModal";
+import { useCart } from "../../context/CartContext";
 
 const POSPage = () => {
   const navigate = useNavigate();
@@ -30,12 +22,26 @@ const POSPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
 
-  const [customers, setCustomers] = useState([createEmptyCustomer("Customer 1")]);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [scrollStart, setScrollStart] = useState(0);
-  const [saving, setSaving] = useState(false);
+  const [invoiceSaleId, setInvoiceSaleId] = useState(null);
 
-  const activeCart = customers[activeIndex];
+  const {
+    customers,
+    activeIndex,
+    setActiveIndex,
+    activeCart,
+    updateActiveCart,
+    handleIncrement,
+    handleDecrement,
+    handleRemoveItem,
+    handleLaborChange,
+    handlePaidChange,
+    handleClear,
+    handleAddCustomer,
+    scrollStart,
+    setScrollStart,
+    saving,
+    setSaving,
+  } = useCart();
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -47,7 +53,6 @@ const POSPage = () => {
           api.get("/product").catch(() => api.get("/products")).catch(() => ({ data: [] })),
         ]);
 
-        // Process Pages
         const fetchedPages = Array.isArray(pagesRes.data?.pages)
           ? pagesRes.data.pages
           : Array.isArray(pagesRes.data)
@@ -59,7 +64,6 @@ const POSPage = () => {
           setSelectedPageId(firstId);
         }
 
-        // Process Categories
         const fetchedCategories = Array.isArray(categoriesRes.data?.categories)
           ? categoriesRes.data.categories
           : Array.isArray(categoriesRes.data)
@@ -67,7 +71,6 @@ const POSPage = () => {
           : [];
         setCategories(fetchedCategories);
 
-        // Process Products
         const rawProducts = Array.isArray(productsRes.data?.products)
           ? productsRes.data.products
           : Array.isArray(productsRes.data)
@@ -84,7 +87,6 @@ const POSPage = () => {
     fetchInitialData();
   }, []);
 
-  // Reset category selection whenever the page header changes
   useEffect(() => {
     setSelectedCategoryId(null);
   }, [selectedPageId]);
@@ -103,7 +105,6 @@ const POSPage = () => {
     }
   };
 
-  // Filter Categories based on selected Page ID
   const filteredCategories = useMemo(() => {
     if (!selectedPageId) return categories;
     return categories.filter((cat) => {
@@ -112,7 +113,6 @@ const POSPage = () => {
     });
   }, [categories, selectedPageId]);
 
-  // Filter Products based on Category ID & Search Term
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
       const isActive = p.status ? p.status.toLowerCase() !== "inactive" : true;
@@ -127,12 +127,6 @@ const POSPage = () => {
       return isActive && matchesCategory && matchesSearch;
     });
   }, [products, selectedCategoryId, searchTerm]);
-
-  const updateActiveCart = (updater) => {
-    setCustomers((prev) =>
-      prev.map((c, idx) => (idx === activeIndex ? updater(c) : c))
-    );
-  };
 
   const handleAddToCart = (product) => {
     updateActiveCart((cart) => {
@@ -162,57 +156,8 @@ const POSPage = () => {
     });
   };
 
-  const handleIncrement = (productId) => {
-    updateActiveCart((cart) => ({
-      ...cart,
-      items: cart.items.map((i) =>
-        i.product_id === productId && i.qty < i.maxStock ? { ...i, qty: i.qty + 1 } : i
-      ),
-    }));
-  };
-
-  const handleDecrement = (productId) => {
-    updateActiveCart((cart) => ({
-      ...cart,
-      items: cart.items.map((i) =>
-        i.product_id === productId ? { ...i, qty: Math.max(1, i.qty - 1) } : i
-      ),
-    }));
-  };
-
-  const handleRemoveItem = (productId) => {
-    updateActiveCart((cart) => ({
-      ...cart,
-      items: cart.items.filter((i) => i.product_id !== productId),
-    }));
-  };
-
-  const handleLaborChange = (value) => {
-    updateActiveCart((cart) => ({ ...cart, laborCharges: value }));
-  };
-
-  const handlePaidChange = (value) => {
-    updateActiveCart((cart) => ({ ...cart, paidAmount: value }));
-  };
-
-  const handleClear = () => {
-    updateActiveCart((cart) => ({
-      ...cart,
-      items: [],
-      laborCharges: "",
-      paidAmount: "",
-      invoiceNo: null,
-      saleId: null,
-    }));
-  };
-
-  const handleAddCustomer = () => {
-    setCustomers((prev) => [...prev, createEmptyCustomer(`Customer ${prev.length + 1}`)]);
-    setActiveIndex(customers.length);
-  };
-
   const handleSaveBill = async () => {
-    if (activeCart.items.length === 0) return;
+    if (activeCart.items.length === 0) return null;
 
     const subtotal = activeCart.items.reduce((sum, i) => sum + i.qty * i.price, 0);
     const labor = Number(activeCart.laborCharges) || 0;
@@ -220,7 +165,7 @@ const POSPage = () => {
 
     if (paid < (subtotal + labor)) {
       alert("Paid amount is less than total.");
-      return;
+      return null;
     }
 
     setSaving(true);
@@ -229,7 +174,7 @@ const POSPage = () => {
         items: activeCart.items.map((i) => ({
           product_id: i.product_id,
           qty: i.qty,
-          price: i.price, 
+          price: i.price,
         })),
         labor_charges: labor,
         paid_amount: paid,
@@ -252,11 +197,16 @@ const POSPage = () => {
   };
 
   const handlePrint = async () => {
-    if (!activeCart.invoiceNo) {
+    if (activeCart.items.length === 0) return;
+
+    let saleId = activeCart.saleId;
+    if (!saleId) {
       const result = await handleSaveBill();
       if (!result) return;
+      saleId = result.sale_id;
     }
-    window.print();
+
+    setInvoiceSaleId(saleId);
   };
 
   const handleReturn = () => {
@@ -297,7 +247,6 @@ const POSPage = () => {
           />
 
           <div className="flex flex-col xl:flex-row gap-4 flex-1 min-h-0 items-stretch overflow-hidden">
-            {/* Scrollable Product Grid */}
             <div className="flex-1 min-w-0 max-h-[calc(100vh-140px)] overflow-y-auto pr-2">
               <ProductGrid
                 products={filteredProducts}
@@ -306,7 +255,6 @@ const POSPage = () => {
               />
             </div>
 
-            {/* Cart Panel */}
             <div className="w-full xl:w-[360px] shrink-0 max-h-[calc(100vh-140px)] flex flex-col">
               <CartPanel
                 cart={activeCart}
@@ -325,6 +273,13 @@ const POSPage = () => {
           </div>
         </main>
       </div>
+
+      {invoiceSaleId && (
+        <InvoiceModal
+          saleId={invoiceSaleId}
+          onClose={() => setInvoiceSaleId(null)}
+        />
+      )}
     </div>
   );
 };
