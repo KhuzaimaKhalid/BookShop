@@ -1,21 +1,27 @@
 {
-  "name": "frontend",
+  "name": "shahid-book-depot",
   "private": true,
   "version": "1.0.0",
+  "description": "Point of Sale system for Shahid Book Depot",
   "type": "module",
   "main": "main.js",
+  "author": {
+    "name": "Khuzaima Khalid",
+    "company": "Trust Nexus"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron": "electron .",
+    "electron": "cross-env ELECTRON_START_URL=http://localhost:5173 electron .",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http-get://localhost:5173 && npm run electron\"",
     "dist": "npm run build && electron-builder"
   },
   "build": {
-    "appId": "com.atrautomotive.app",
-    "productName": "ATR Automotive",
+    "appId": "com.trustnexus.shahidbookdepot",
+    "productName": "Shahid Book Depot",
+    "copyright": "Copyright © 2026 Trust Nexus / Khuzaima Khalid",
     "files": [
       "dist/**/*",
       "main.js",
@@ -25,13 +31,16 @@
       "output": "release"
     },
     "win": {
-    "icon": "src/assets/logo.png"
-  }
+      "target": "nsis",
+      "publisherName": "Trust Nexus",
+      "icon": "src/assets/logo.ico"
+    }
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "axios": "^1.18.1",
-    "dotenv": "^16.4.7",
+    "dotenv": "^17.4.2",
+    "file-saver": "^2.0.5",
     "lucide-react": "^1.27.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -44,9 +53,9 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
-    "concurrently": "^10.0.4",
+    "concurrently": "^10.0.5",
     "cross-env": "^10.1.0",
-    "electron": "^43.2.0",
+    "electron": "^43.6.0",
     "electron-builder": "^25.1.8",
     "eslint": "^10.6.0",
     "eslint-plugin-react-hooks": "^7.1.1",
