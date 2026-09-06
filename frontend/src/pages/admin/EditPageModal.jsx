@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import api from "../../services/api";
 
-const EditPageModal = ({ page, onClose, onUpdated }) => {
+const EditPageModal = ({ page, onClose, onUpdated, onDeleted }) => {
   const [name, setName] = useState(page?.name || "");
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -34,6 +35,28 @@ const EditPageModal = ({ page, onClose, onUpdated }) => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!window.confirm(`Are you sure you want to delete "${page.name}"?`)) {
+      return;
+    }
+
+    setDeleting(true);
+    setError("");
+
+    try {
+      await api.delete(`/pages/${page.id}`);
+      if (onDeleted) {
+        onDeleted(page.id);
+      }
+      onClose();
+    } catch (err) {
+      console.error("Error deleting page:", err);
+      setError(err.response?.data?.message || "Failed to delete page.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-[1px] flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[420px] p-8 flex flex-col items-center relative border border-gray-100">
@@ -57,18 +80,26 @@ const EditPageModal = ({ page, onClose, onUpdated }) => {
             />
           </div>
 
-          <div className="flex items-center gap-4 w-full">
+          <div className="flex items-center gap-3 w-full">
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={submitting || deleting}
+              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs transition text-center shadow-sm disabled:opacity-50"
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </button>
             <button
               type="button"
               onClick={onClose}
-              disabled={submitting}
+              disabled={submitting || deleting}
               className="flex-1 py-2.5 border border-gray-300 rounded-lg text-gray-800 font-bold text-xs hover:bg-gray-50 transition text-center shadow-sm disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || deleting}
               className="flex-1 py-2.5 bg-[#CD051F] hover:bg-red-700 text-white rounded-lg font-bold text-xs transition text-center shadow-sm disabled:opacity-60"
             >
               {submitting ? "Saving..." : "Save"}
