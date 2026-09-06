@@ -2,13 +2,14 @@ import { useState, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 import api from "../../services/api";
 
-const EditCategoryModal = ({ category, pages = [], onClose, onUpdated }) => {
+const EditCategoryModal = ({ category, pages = [], onClose, onUpdated, onDeleted }) => {
   const [name, setName] = useState(category?.name || "");
   const [pageId, setPageId] = useState(category?.page_id || "");
   const [pageDropdownOpen, setPageDropdownOpen] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(category?.image || null);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -82,6 +83,28 @@ const EditCategoryModal = ({ category, pages = [], onClose, onUpdated }) => {
       setError(err.response?.data?.message || "Failed to update category.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm(`Are you sure you want to delete "${category.name}"?`)) {
+      return;
+    }
+
+    setDeleting(true);
+    setError("");
+
+    try {
+      await api.delete(`/categories/${category.id}`);
+      if (onDeleted) {
+        onDeleted(category.id);
+      }
+      onClose();
+    } catch (err) {
+      console.error("Error deleting category:", err);
+      setError(err.response?.data?.message || "Failed to delete category.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -199,18 +222,26 @@ const EditCategoryModal = ({ category, pages = [], onClose, onUpdated }) => {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-4 w-full">
+          <div className="flex items-center gap-3 w-full">
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={submitting || deleting}
+              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs transition text-center shadow-sm disabled:opacity-50"
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </button>
             <button
               type="button"
               onClick={onClose}
-              disabled={submitting}
+              disabled={submitting || deleting}
               className="flex-1 py-2.5 border border-gray-300 rounded-lg text-gray-800 font-bold text-xs hover:bg-gray-50 transition text-center shadow-sm disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || deleting}
               className="flex-1 py-2.5 bg-[#D30027] hover:bg-red-700 text-white rounded-lg font-bold text-xs transition text-center shadow-sm disabled:opacity-60"
             >
               {submitting ? "Saving..." : "Save"}
