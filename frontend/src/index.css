@@ -135,3 +135,12 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* Hide scrollbars app-wide, scrolling still works */
+* {
+  -ms-overflow-style: none;   /* IE and Edge */
+  scrollbar-width: none;      /* Firefox */
+}
+*::-webkit-scrollbar {
+  display: none;              /* Chrome, Safari, Opera */
+}
