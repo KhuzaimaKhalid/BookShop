@@ -1,11 +1,15 @@
-const express = require('express')
+const express = require('express');
+const multer = require('multer');
 
-const { createBusiness, getBusiness } = require('../controllers/businessController')
+const { createBusiness, getBusiness } = require('../controllers/businessController');
 const authMiddleware = require("../middlewares/authMiddleware");
 const adminMiddleware = require("../middlewares/adminMiddleware");
-const router = express.Router()
 
-router.put("/settings",authMiddleware, adminMiddleware, createBusiness)
-    .get("/name", getBusiness)
+const router = express.Router();
 
-module.exports = router
+const upload = multer({ storage: multer.memoryStorage() });
+
+router.put("/settings", authMiddleware, adminMiddleware, upload.single('logo'), createBusiness)
+      .get("/name", getBusiness);
+
+module.exports = router;
