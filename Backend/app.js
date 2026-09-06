@@ -47,10 +47,10 @@ app.use("/api/business", businessRoutes);
 app.use("/business", businessRoutes);
 
 app.use("/api/courses", courseRoutes);
-app.use("/course", courseRoutes);
+app.use("/courses", courseRoutes);
 
 app.use('/api/expenses', expenseRoutes);
-app.use('/expense', expenseRoutes);
+app.use('/expenses', expenseRoutes);
 
 app.use("/api/stationary", stationaryRoutes);
 app.use("/stationary", stationaryRoutes);
