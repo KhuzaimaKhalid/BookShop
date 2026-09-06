@@ -5,10 +5,10 @@ const authMiddleware = require("../middlewares/authMiddleware");
 const {getReturns, getReturnById, getInvoiceForReturn, createReturn, deleteReturn} = require("../controllers/returnController");
 
 router
-    .get("/", authMiddleware, getReturns)
-    .get("/:id", authMiddleware, getReturnById)
-    .get("/invoice/:invoiceNo", authMiddleware, getInvoiceForReturn)
-    .post("/", authMiddleware, createReturn)
-    .delete("/:id", authMiddleware, deleteReturn);
+    .get("/", getReturns)
+    .get("/:id", getReturnById)
+    .get("/invoice/:invoiceNo", getInvoiceForReturn)
+    .post("/", createReturn)
+    .delete("/:id", deleteReturn);
 
 module.exports = router;

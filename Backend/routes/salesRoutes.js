@@ -7,17 +7,17 @@ const adminMiddleware = require("../middlewares/adminMiddleware");
 
 const router = express.Router();
 
-router.post("/", authMiddleware, createSale);
+router.post("/", createSale);
 
-router.get("/", authMiddleware, getAllSales);
+router.get("/", getAllSales);
 
-router.get("/search", authMiddleware, searchSaleByInvoice);
+router.get("/search", searchSaleByInvoice);
 
-router.get("/date-range", authMiddleware, getSalesByDateRange);
+router.get("/date-range", getSalesByDateRange);
 
-router.get("/invoice/:invoice_no", authMiddleware, getSaleByInvoice);
+router.get("/invoice/:invoice_no", getSaleByInvoice);
 
-router.get("/:id", authMiddleware, getSaleById);
+router.get("/:id", getSaleById);
 
 router.delete("/:id", authMiddleware, adminMiddleware, deleteSale);
 
