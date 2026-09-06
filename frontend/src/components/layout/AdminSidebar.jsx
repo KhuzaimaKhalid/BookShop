@@ -5,11 +5,13 @@ import {
   Package,
   ShoppingCart,
   ClipboardList,
+  Receipt,
   User,
   ArrowLeft,
   X,
 } from "lucide-react";
-import book from "../../assets/book.png";
+import api from "../../services/api";
+import defaultLogo from "../../assets/book.png";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutGrid, path: "/admin/dashboard" },
@@ -32,8 +34,10 @@ const navItems = [
       { label: "Product Report", path: "/admin/reports/products" },
       { label: "Profit Report", path: "/admin/reports/profit" },
       { label: "Stock Report", path: "/admin/reports/stock" },
+      { label: "Expense Report", path: "/admin/reports/expense" }
     ],
   },
+  { label: "Expenses", icon: Receipt, path: "/admin/expenses" },
   { label: "User", icon: User, path: "/admin/user" },
 ];
 
@@ -41,6 +45,31 @@ const AdminSidebar = ({ mobileOpen, onClose }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState({});
+  const [businessLogo, setBusinessLogo] = useState("");
+  const [businessName, setBusinessName] = useState("");
+
+  useEffect(() => {
+    const fetchBusinessLogo = async () => {
+      try {
+        const res = await api.get("/business/name");
+        if (res?.data?.business) {
+          const rawLogo = res.data.business.logo;
+          // Construct full image path if server returns relative upload path
+          if (rawLogo && !rawLogo.startsWith("http") && !rawLogo.startsWith("blob:")) {
+            const baseURL = api.defaults.baseURL ? api.defaults.baseURL.replace(/\/api\/?$/, "") : "";
+            setBusinessLogo(`${baseURL}${rawLogo.startsWith('/') ? '' : '/'}${rawLogo}`);
+          } else {
+            setBusinessLogo(rawLogo || "");
+          }
+          setBusinessName(res.data.business.name || "");
+        }
+      } catch (err) {
+        console.error("Error loading business logo in sidebar:", err);
+      }
+    };
+
+    fetchBusinessLogo();
+  }, []);
 
   useEffect(() => {
     const next = {};
@@ -161,10 +190,11 @@ const AdminSidebar = ({ mobileOpen, onClose }) => {
         {/* Pinned Bottom Container */}
         <div className="px-4 pt-4 flex flex-col gap-3 items-center shrink-0">
           <img
-            src={book}
-            alt="ATR Asset"
-            className="w-full max-w-[160px] max-h-28 object-contain drop-shadow-xl pointer-events-none select-none"
+            src={businessLogo || defaultLogo}
+            alt={businessName || "Business Logo"}
+            className="w-full max-w-[160px] max-h-24 object-contain drop-shadow-xl pointer-events-none select-none"
           />
+
           <button
             onClick={() => {
               onClose();
