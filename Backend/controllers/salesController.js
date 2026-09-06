@@ -9,24 +9,22 @@ const generateInvoiceNo = async () => {
 
 const createSale = async (req, res) => {
     try {
-      const { items, labor_charges, paid_amount } = req.body;
+      const { items, paid_amount } = req.body;
   
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ message: "Cart items cannot be empty." });
       }
   
-      // Ensure numeric inputs fallback safely to 0 (prevents NaN)
-      const labor = Number(labor_charges) || 0;
       const paid = Number(paid_amount) || 0;
   
-      // Calculate subtotal safely
+      // Calculate subtotal and total
       const subtotal = items.reduce((sum, item) => {
         const price = Number(item.price) || 0;
         const qty = Number(item.qty) || 0;
         return sum + (qty * price);
       }, 0);
-  
-      const total = subtotal + labor;
+
+      const total = subtotal;
   
       if (paid < total) {
         return res.status(400).json({ message: "Paid amount is less than total." });
@@ -34,35 +32,53 @@ const createSale = async (req, res) => {
   
       const change = Math.max(0, paid - total);
       const invoice_no = `INV-${Date.now()}`;
-      const createdBy = req.user?.id || null;
-  
-      // Execute database operations
+
+      // Resolve valid createdBy user ID
+      let createdBy = req.user?.id;
+      if (!createdBy) {
+        const adminUser = await db.prepare('SELECT id FROM users LIMIT 1').get();
+        createdBy = adminUser ? adminUser.id : null;
+      }
+
+      if (!createdBy) {
+        return res.status(400).json({ message: "No valid user found to attach sale to." });
+      }
+
+      // Execute transaction
       const transaction = db.transaction(async (txDb) => {
         const saleResult = await txDb.prepare(
-          'INSERT INTO sales (invoice_no, subtotal, labor_charges, total, paid_amount, change, created_by) VALUES (?,?,?,?,?,?,?)'
+          'INSERT INTO sales (invoice_no, subtotal, total, paid_amount, change, created_by) VALUES (?, ?, ?, ?, ?, ?)'
         ).run(
           invoice_no, 
-          Number(subtotal) || 0, 
-          Number(labor) || 0, 
+          Number(subtotal) || 0,
           Number(total) || 0, 
-          Number(paid) || 0, 
-          Number(change) || 0, 
+          Number(paid) || 0,
+          Number(change) || 0,
           createdBy
         );
   
         const sale_id = Number(saleResult.lastInsertRowid);
   
         for (const item of items) {
+          // Parse string IDs like "CRS-3" or "STAT-12" to raw numbers
+          const cleanProductId = typeof item.product_id === 'string' 
+            ? Number(item.product_id.replace(/\D/g, '')) 
+            : Number(item.product_id);
+
           const itemQty = Number(item.qty) || 0;
           const itemPrice = Number(item.price) || 0;
+
+          if (!cleanProductId) {
+            throw new Error(`Invalid product_id: ${item.product_id}`);
+          }
   
           await txDb.prepare(
-            'INSERT INTO sale_items (sale_id, product_id, qty, price) VALUES (?,?,?,?)'
-          ).run(sale_id, item.product_id, itemQty, itemPrice);
+            'INSERT INTO sale_items (sale_id, product_id, qty, price) VALUES (?, ?, ?, ?)'
+          ).run(sale_id, cleanProductId, itemQty, itemPrice);
   
           await txDb.prepare(
             'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?'
-          ).run(itemQty, item.product_id);
+          ).run(itemQty, cleanProductId);
         }
   
         return sale_id;
@@ -75,7 +91,6 @@ const createSale = async (req, res) => {
         sale_id,
         invoice_no,
         subtotal,
-        labor_charges: labor,
         total,
         paid_amount: paid,
         change
@@ -83,9 +98,9 @@ const createSale = async (req, res) => {
   
     } catch (error) {
       console.error("Error creating sale:", error);
-      return res.status(500).json({ message: "Failed to create sale" });
+      return res.status(500).json({ message: "Failed to create sale", error: error.message });
     }
-  };
+};
 
 const getAllSales = async (req, res) => {
     try {

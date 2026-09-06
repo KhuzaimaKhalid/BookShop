@@ -53,9 +53,11 @@ const updateCategory = async (req, res) => {
             if (existing.image && existing.image.includes('blob.vercel-storage.com')) {
                 await del(existing.image, { token: process.env.BLOB_READ_WRITE_TOKEN });
             }
+            // ADDED TOKEN HERE
             const blob = await put(`categories/${Date.now()}-${req.file.originalname}`, req.file.buffer, {
                 access: 'public',
-                addRandomSuffix: true
+                addRandomSuffix: true,
+                token: process.env.BLOB_READ_WRITE_TOKEN
             });
             imageUrl = blob.url;
         }
@@ -85,7 +87,7 @@ const updateCategory = async (req, res) => {
 
 const getAllCategories = async (req, res) => {
     try {
-        const sql = 'SELECT * FROM categories'; 
+        const sql = 'SELECT * FROM categories WHERE is_delete = 0 OR is_delete IS NULL'; 
         const categories = await db.prepare(sql).all();
 
         return res.status(200).json({ categories: categories || [] }); 
@@ -95,10 +97,11 @@ const getAllCategories = async (req, res) => {
     }
 };
 
+// 2. Fetch category by ID (ensuring it's not soft-deleted)
 const getCategoriesById = async (req, res) => {
     try {
         const { id } = req.params;
-        const sql = 'SELECT * FROM categories where id = ?';
+        const sql = 'SELECT * FROM categories WHERE id = ? AND (is_delete = 0 OR is_delete IS NULL)';
         const category = await db.prepare(sql).get(id);
         if (!category) {
             return res.status(404).json({ message: "Category not found" });
@@ -110,17 +113,19 @@ const getCategoriesById = async (req, res) => {
     }
 };
 
+// 3. Soft Delete Category
 const deleteCategory = async (req, res) => {
     try {
         const { id } = req.params;
-        const category = await db.prepare('SELECT image FROM categories WHERE id = ?').get(id);
+
+        const category = await db.prepare('SELECT id FROM categories WHERE id = ?').get(id);
         if (!category) {
             return res.status(404).json({ message: "Category not found" });
         }
-        if (category.image && category.image.includes('blob.vercel-storage.com')) {
-            await del(category.image, { token: process.env.BLOB_READ_WRITE_TOKEN });
-        }
-        await db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+
+        // Perform soft delete on the category
+        await db.prepare('UPDATE categories SET is_delete = 1 WHERE id = ?').run(id);
+
         return res.status(200).json({ message: "Category deleted successfully" });
     } catch (error) {
         console.error(error);

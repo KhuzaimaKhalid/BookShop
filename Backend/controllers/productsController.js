@@ -95,97 +95,127 @@ const deleteProduct = async (req, res) => {
     }
 };
 
-const getAllProducts = async(req,res) =>{
+const getAllProducts = async (req, res) => {
     try {
-        const sql = 'SELECT * FROM products';
+        // Only return products whose associated category is not soft-deleted
+        const sql = `
+            SELECT p.* 
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE (c.is_delete = 0 OR c.is_delete IS NULL)
+        `;
         const products = await db.prepare(sql).all();
         return res.status(200).json(products);
     } catch (error) {
-        console.error(error)
-        return res.status(500).json({message: 'Server error'});
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
     }
-}
+};
 
-const getProductById = async(req,res) =>{
+const getProductById = async (req, res) => {
     try {
-        const {id} = req.params;
-        const sql = 'SELECT * FROM products WHERE id = ?';
+        const { id } = req.params;
+        const sql = `
+            SELECT p.* 
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.id = ? AND (c.is_delete = 0 OR c.is_delete IS NULL)
+        `;
         const product = await db.prepare(sql).get(id);
-        if(!product) {
-            return res.status(404).json({message: 'Product not found'});
+        if (!product) {
+            return res.status(404).json({ message: 'Product not found' });
         }
         return res.status(200).json(product);
     } catch (error) {
-        console.error(error)
-        return res.status(500).json({message: 'Server error'});
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
     }
-}
+};
 
-const updateStock = async(req,res) =>{
+const updateStock = async (req, res) => {
     try {
-        const {id} = req.params;
-        const {stock_quantity} = req.body;
+        const { id } = req.params;
+        const { stock_quantity } = req.body;
         if (stock_quantity == null) {
             return res.status(400).json({ message: "Please provide stock quantity" });
         }
         const sql = 'UPDATE products SET stock_quantity = ? WHERE id = ?';
-        const result = await db.prepare(sql).run(stock_quantity,id);
-        if(result.changes === 0) {
-            return res.status(404).json({message: 'Product not found'});
+        const result = await db.prepare(sql).run(stock_quantity, id);
+        if (result.changes === 0) {
+            return res.status(404).json({ message: 'Product not found' });
         }
-        return res.status(200).json({message: 'Stock updated successfully'});
+        return res.status(200).json({ message: 'Stock updated successfully' });
     } catch (error) {
-        console.error(error)
-        return res.status(500).json({message: 'Server error'});
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
     }
-}
+};
 
-const getLowStockProducts = async(req,res) =>{
-
+const getLowStockProducts = async (req, res) => {
     try {
-        const sql = 'SELECT * FROM products WHERE stock_quantity < min_stock_level';
+        const sql = `
+            SELECT p.* 
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.stock_quantity < p.min_stock_level AND (c.is_delete = 0 OR c.is_delete IS NULL)
+        `;
         const products = await db.prepare(sql).all();
         return res.status(200).json(products);
     } catch (error) {
-        console.error(error)
-        return res.status(500).json({message: 'Server error'});
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
     }
-}
+};
 
-const getOutOfStockProducts = async(req,res) =>{
+const getOutOfStockProducts = async (req, res) => {
     try {
-        const sql = 'SELECT * FROM products WHERE stock_quantity = 0';
+        const sql = `
+            SELECT p.* 
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.stock_quantity = 0 AND (c.is_delete = 0 OR c.is_delete IS NULL)
+        `;
         const products = await db.prepare(sql).all();
         return res.status(200).json(products);
     } catch (error) {
-        console.error(error)
-        return res.status(500).json({message: 'Server error'});
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
     }
-}
+};
 
-const getProductsByCategory = async(req,res) =>{
+const getProductsByCategory = async (req, res) => {
     try {
-        const {category_id} = req.params;
-        const sql = 'SELECT * FROM products WHERE category_id = ?';
+        const { category_id } = req.params;
+        const sql = `
+            SELECT p.* 
+            FROM products p
+            INNER JOIN categories c ON p.category_id = c.id
+            WHERE p.category_id = ? AND (c.is_delete = 0 OR c.is_delete IS NULL)
+        `;
         const products = await db.prepare(sql).all(category_id);
         return res.status(200).json(products);
     } catch (error) {
-        console.error(error)
-        return res.status(500).json({message: 'Server error'});
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
     }
-}
+};
 
-const searchProduct = async(req,res) =>{
+const searchProduct = async (req, res) => {
     try {
-        const {name} = req.query;
-        const sql = 'SELECT * FROM products WHERE name LIKE ?';
+        const { name } = req.query;
+        const sql = `
+            SELECT p.* 
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            WHERE p.name LIKE ? AND (c.is_delete = 0 OR c.is_delete IS NULL)
+        `;
         const products = await db.prepare(sql).all(`%${name}%`);
         return res.status(200).json(products);
     } catch (error) {
-        console.error(error)
-        return res.status(500).json({message: 'Server error'});
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
     }
-}
+};
 
 module.exports = {
     createProduct,
@@ -198,4 +228,4 @@ module.exports = {
     getOutOfStockProducts,
     getProductsByCategory,
     searchProduct
-}
+};
