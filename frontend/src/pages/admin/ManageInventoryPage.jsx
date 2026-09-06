@@ -146,62 +146,58 @@ const ManageInventoryPage = () => {
 
     return (
         <AdminLayout>
-            {/* Outer Wrapper: Fixed screen height without page scrollbars */}
             <div className="flex flex-col h-full overflow-hidden">
 
-                {/* Pages Section */}
-                <div className="flex items-center justify-between mb-1">
-                    <h2 className="text-base sm:text-lg font-bold text-slate-900">Page</h2>
-                </div>
-                <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-1 max-w-full">
-                    {pages.map((page) => {
-                        const isActive = page.id === selectedPageId;
-                        return (
-                            <div
-                                key={page.id}
-                                className="flex items-center rounded-lg overflow-hidden border border-slate-900 shrink-0"
-                            >
-                                <button
-                                    onClick={() => {
-                                        setSelectedPageId(page.id);
-                                        setSelectedCategoryId(null);
-                                    }}
-                                    className={`px-3 py-1.5 text-xs sm:text-sm font-bold transition whitespace-nowrap ${
-                                        isActive ? "bg-[#CD051F] text-white" : "bg-white text-slate-900"
-                                    }`}
+                {/* Section 1: Page */}
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 mb-2">Page</h2>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full flex-1">
+                        {pages.map((page) => {
+                            const isActive = page.id === selectedPageId;
+                            return (
+                                <div
+                                    key={page.id}
+                                    className="flex items-center rounded-lg overflow-hidden border border-slate-900 shrink-0"
                                 >
-                                    {page.name}
-                                </button>
-                                <button
-                                    onClick={() => setEditPageTarget(page)}
-                                    className={`px-2 py-1.5 border-l transition ${
-                                        isActive
-                                            ? "bg-[#CD051F] border-white/30 text-white hover:bg-red-700"
-                                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                                    }`}
-                                >
-                                    <Pencil size={13} />
-                                </button>
-                            </div>
-                        );
-                    })}
+                                    <button
+                                        onClick={() => {
+                                            setSelectedPageId(page.id);
+                                            setSelectedCategoryId(null);
+                                        }}
+                                        className={`px-3 py-1.5 text-xs sm:text-sm font-bold transition whitespace-nowrap ${
+                                            isActive ? "bg-[#CD051F] text-white" : "bg-white text-slate-900"
+                                        }`}
+                                    >
+                                        {page.name}
+                                    </button>
+                                    <button
+                                        onClick={() => setEditPageTarget(page)}
+                                        className={`px-2 py-1.5 border-l transition ${
+                                            isActive
+                                                ? "bg-[#CD051F] border-white/30 text-white hover:bg-red-700"
+                                                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                                        }`}
+                                    >
+                                        <Pencil size={13} />
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
 
                     <button
                         onClick={() => setIsAddPageOpen(true)}
-                        className="flex items-center gap-1.5 bg-[#CD051F] hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-3 py-1.5 rounded-lg transition shadow-sm shrink-0 whitespace-nowrap"
+                        className="flex items-center gap-1.5 bg-[#CD051F] hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-3.5 py-2 rounded-lg transition shadow-sm shrink-0 whitespace-nowrap"
                     >
                         <Plus size={15} strokeWidth={3} />
                         Add New Page
                     </button>
                 </div>
 
-                {/* Categories Section */}
-                <div className="flex items-center justify-between mb-1">
-                    <h2 className="text-base sm:text-lg font-bold text-slate-900">Categories</h2>
-                </div>
-                <div className="flex flex-col gap-2 mb-3 max-w-full">
-                    {/* Horizontal Scrollable Categories */}
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
+                {/* Section 2: Categories */}
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 mb-2">Categories</h2>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full flex-1">
                         <div className="flex items-center rounded-lg overflow-hidden border border-slate-900 shrink-0">
                             <button
                                 onClick={() => setSelectedCategoryId(null)}
@@ -243,22 +239,18 @@ const ManageInventoryPage = () => {
                         })}
                     </div>
 
-                    {/* Fixed Bottom Row Button */}
-                    <div>
-                        <button
-                            onClick={() => setIsAddCategoryOpen(true)}
-                            disabled={!selectedPageId}
-                            className="flex items-center gap-1.5 bg-[#CD051F] hover:bg-red-700 disabled:opacity-50 text-white text-xs sm:text-sm font-bold px-3 py-1.5 rounded-lg transition shadow-sm shrink-0 whitespace-nowrap"
-                        >
-                            <Plus size={15} strokeWidth={3} />
-                            Add New Category
-                        </button>
-                    </div>
+                    <button
+                        onClick={() => setIsAddCategoryOpen(true)}
+                        disabled={!selectedPageId}
+                        className="flex items-center gap-1.5 bg-[#CD051F] hover:bg-red-700 disabled:opacity-50 text-white text-xs sm:text-sm font-bold px-3.5 py-2 rounded-lg transition shadow-sm shrink-0 whitespace-nowrap"
+                    >
+                        <Plus size={15} strokeWidth={3} />
+                        Add New Category
+                    </button>
                 </div>
 
-                {/* Product List Toolbar */}
+                {/* Section 3: Product List Toolbar */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 shrink-0">
-                    {/* Left Group: Heading + Search + Status Filter */}
                     <div className="flex flex-wrap items-center gap-3">
                         <h2 className="text-base sm:text-lg font-bold text-slate-900 shrink-0">
                             Product List
@@ -291,17 +283,16 @@ const ManageInventoryPage = () => {
                         </select>
                     </div>
 
-                    {/* Right Group: Add Product Button */}
                     <button
                         onClick={() => navigate("/admin/products/add")}
-                        className="flex items-center gap-1.5 bg-[#CD051F] hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-3.5 py-1.5 rounded-lg transition shadow-sm shrink-0 whitespace-nowrap"
+                        className="flex items-center gap-1.5 bg-[#CD051F] hover:bg-red-700 text-white text-xs sm:text-sm font-bold px-3.5 py-2 rounded-lg transition shadow-sm shrink-0 whitespace-nowrap"
                     >
                         <Plus size={15} strokeWidth={3} />
                         Add New Product
                     </button>
                 </div>
 
-                {/* Product List Table Container: Full Vertical Extension */}
+                {/* Product List Table */}
                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto overflow-y-auto flex-1 min-h-0 w-full mb-2">
                     <table className="w-full text-xs sm:text-sm min-w-[600px]">
                         <thead className="sticky top-0 bg-slate-50 z-10">
