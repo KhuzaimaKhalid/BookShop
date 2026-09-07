@@ -87,7 +87,7 @@ const updateCategory = async (req, res) => {
 
 const getAllCategories = async (req, res) => {
     try {
-        const sql = 'SELECT * FROM categories WHERE is_delete = 0 OR is_delete IS NULL'; 
+        const sql = 'SELECT * FROM categories WHERE CAST(is_delete AS INTEGER) = 0 OR is_delete IS NULL'; 
         const categories = await db.prepare(sql).all();
 
         return res.status(200).json({ categories: categories || [] }); 

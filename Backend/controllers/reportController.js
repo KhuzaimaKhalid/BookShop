@@ -111,15 +111,20 @@ const productSalesReport = async (req, res) => {
             dateFilter = `date(s.created_at) BETWEEN date(?) AND date(?)`;
             params = [from, to];
         }
-        const products = await db.prepare(
-            `SELECT p.id, p.name, SUM(si.qty) as total_sold
+
+        const pages = await db.prepare(
+            `SELECT pg.id, pg.name, SUM(si.qty) as total_sold
              FROM sale_items si
              JOIN products p ON si.product_id = p.id
+             JOIN categories c ON p.category_id = c.id
+             JOIN pages pg ON c.page_id = pg.id
              JOIN sales s ON si.sale_id = s.id
              WHERE ${dateFilter}
-             GROUP BY p.id, p.name ORDER BY total_sold DESC LIMIT 5`
+             GROUP BY pg.id, pg.name 
+             ORDER BY total_sold DESC LIMIT 5`
         ).all(...params);
-        return res.status(200).json(products);
+
+        return res.status(200).json(pages);
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: 'Server error' });
@@ -279,22 +284,31 @@ const dailySalesReport = async (req, res) => {
 const categoryWiseSalesReport = async (req, res) => {
     try {
         const { from, to } = req.query;
-        let dateFilter = `date(s.created_at) >= date('now','localtime','-6 days')`;
+        let dateFilter = `WHERE date(s.created_at) >= date('now','localtime','-6 days')`;
         let params = [];
+
         if (from && to) {
-            dateFilter = `date(s.created_at) BETWEEN date(?) AND date(?)`;
+            dateFilter = `WHERE date(s.created_at) BETWEEN date(?) AND date(?)`;
             params = [from, to];
         }
-        const categoryWiseSales = await db.prepare(
-            `SELECT c.id, c.name, SUM(si.qty) as total_sold
+
+        const pageSales = await db.prepare(
+            `SELECT 
+                pg.id AS id, 
+                pg.name AS name, 
+                COALESCE(SUM(si.qty), 0) as total_sold
              FROM sale_items si
-             JOIN products p ON si.product_id = p.id
-             JOIN categories c ON p.category_id = c.id
-             JOIN sales s ON si.sale_id = s.id
-             WHERE ${dateFilter}
-             GROUP BY c.id, c.name ORDER BY total_sold DESC`
+             JOIN sales s ON s.id = si.sale_id
+             JOIN products p ON p.id = si.product_id
+             JOIN categories c ON c.id = p.category_id
+             JOIN pages pg ON pg.id = c.page_id
+             ${dateFilter}
+             GROUP BY pg.id, pg.name
+             HAVING total_sold > 0
+             ORDER BY total_sold DESC`
         ).all(...params);
-        return res.status(200).json(categoryWiseSales);
+
+        return res.status(200).json(pageSales);
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: 'Server error' });

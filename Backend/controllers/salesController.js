@@ -7,6 +7,8 @@ const generateInvoiceNo = async () => {
     return `INV-${String(nextId).padStart(5, '0')}`;
 }
 
+// salesController.js - Inside createSale controller function
+
 const createSale = async (req, res) => {
     try {
       const { items, paid_amount } = req.body;
@@ -14,8 +16,6 @@ const createSale = async (req, res) => {
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ message: "Cart items cannot be empty." });
       }
-  
-      const paid = Number(paid_amount) || 0;
   
       // Calculate subtotal and total
       const subtotal = items.reduce((sum, item) => {
@@ -25,11 +25,9 @@ const createSale = async (req, res) => {
       }, 0);
 
       const total = subtotal;
-  
-      if (paid < total) {
-        return res.status(400).json({ message: "Paid amount is less than total." });
-      }
-  
+
+      // If paid_amount is omitted or 0, default it to the sale total
+      const paid = paid_amount !== undefined ? Number(paid_amount) : total;
       const change = Math.max(0, paid - total);
       const invoice_no = `INV-${Date.now()}`;
 
@@ -60,7 +58,6 @@ const createSale = async (req, res) => {
         const sale_id = Number(saleResult.lastInsertRowid);
   
         for (const item of items) {
-          // Parse string IDs like "CRS-3" or "STAT-12" to raw numbers
           const cleanProductId = typeof item.product_id === 'string' 
             ? Number(item.product_id.replace(/\D/g, '')) 
             : Number(item.product_id);
@@ -116,15 +113,30 @@ const getAllSales = async (req, res) => {
 const getSaleById = async (req, res) => {
     try {
         const { id } = req.params;
-        const sale = await db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
+        
+        // 1. Check local replica first
+        let sale = await db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
+
+        // 2. If missing locally, force an on-demand sync from Turso Cloud
+        if (!sale && typeof db.sync === 'function') {
+            try {
+                await db.sync();
+                sale = await db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
+            } catch (syncErr) {
+                console.error("On-demand sync failed:", syncErr.message);
+            }
+        }
+
         if (!sale) {
             return res.status(404).json({ message: 'Sale not found' });
         }
+
         const items = await db.prepare(
             `SELECT sale_items.id, sale_items.product_id, products.name, sale_items.qty, sale_items.price
              FROM sale_items JOIN products ON sale_items.product_id = products.id
              WHERE sale_items.sale_id = ?`
         ).all(id);
+
         return res.status(200).json({ sale, items });
     } catch (error) {
         console.error(error);
