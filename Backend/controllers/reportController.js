@@ -296,7 +296,9 @@ const categoryWiseSalesReport = async (req, res) => {
             `SELECT 
                 pg.id AS id, 
                 pg.name AS name, 
-                COALESCE(SUM(si.qty), 0) as total_sold
+                COALESCE(SUM(si.qty), 0) AS total_sold,
+                COALESCE(SUM(si.qty * si.price), 0) AS total_sales_amount,
+                COALESCE(SUM((si.price - p.purchase_price) * si.qty), 0) AS total_profit_amount
              FROM sale_items si
              JOIN sales s ON s.id = si.sale_id
              JOIN products p ON p.id = si.product_id
@@ -305,7 +307,7 @@ const categoryWiseSalesReport = async (req, res) => {
              ${dateFilter}
              GROUP BY pg.id, pg.name
              HAVING total_sold > 0
-             ORDER BY total_sold DESC`
+             ORDER BY total_sales_amount DESC`
         ).all(...params);
 
         return res.status(200).json(pageSales);
