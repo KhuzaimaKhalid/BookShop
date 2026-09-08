@@ -1,47 +1,41 @@
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
+const fs = require("fs");
+const { app: electronApp } = require("electron"); // 1. Import Electron app
 
 function createLocalServer() {
   const app = express();
   app.use(cors());
   app.use(express.json());
 
-  app.use((req, res, next) => {
-    if (req.method !== "GET") {
-      return res.status(405).json({ message: "Local server only serves reads" });
-    }
-    next();
-  });
+  // 2. Use userData in production, __dirname in dev
+  const baseDir = electronApp && electronApp.isPackaged
+    ? electronApp.getPath("userData")
+    : path.join(__dirname, "backend");
 
-  // Products
-  app.use("/api/products", require("./backend/routes/productsRoutes"));
-  app.use("/api/product", require("./backend/routes/productsRoutes"));
+  const imagesDir = path.join(baseDir, "images");
+  fs.mkdirSync(path.join(imagesDir, "categories"), { recursive: true });
+  fs.mkdirSync(path.join(imagesDir, "products"), { recursive: true });
+  app.use("/images", express.static(imagesDir));
 
-  // Categories
-  app.use("/api/categories", require("./backend/routes/categoriesRoutes"));
-  app.use("/api/category", require("./backend/routes/categoriesRoutes"));
+  const mount = (pluralPath, singularPath, routeFile) => {
+    app.use(pluralPath, require(routeFile));
+    app.use(singularPath, require(routeFile));
+  };
 
-  // Returns (Added singular alias)
-  app.use("/api/returns", require("./backend/routes/returnRoutes"));
-  app.use("/api/return", require("./backend/routes/returnRoutes"));
+  mount("/api/products", "/api/product", "./backend/routes/productsRoutes");
+  mount("/api/categories", "/api/category", "./backend/routes/categoriesRoutes");
+  mount("/api/returns", "/api/return", "./backend/routes/returnRoutes");
+  mount("/api/expenses", "/api/expense", "./backend/routes/expenseRouter");
+  mount("/api/pages", "/api/page", "./backend/routes/pagesRoutes");
+  mount("/api/reports", "/api/report", "./backend/routes/reportRoutes");
+  mount("/api/sales", "/api/sale", "./backend/routes/salesRoutes");
+  mount("/api/stationary", "/api/stationary", "./backend/routes/stationaryRoutes");
+  mount("/api/business", "/api/business", "./backend/routes/businessRoutes");
+  mount("/api/users", "/api/user", "./backend/routes/userRoutes");
+  mount("/api/courses", "/api/course", "./backend/routes/courseRoutes");
 
-  // Expenses (Added singular alias)
-  app.use("/api/expenses", require("./backend/routes/expenseRouter"));
-  app.use("/api/expense", require("./backend/routes/expenseRouter"));
-
-  // Pages (Added singular alias)
-  app.use("/api/pages", require("./backend/routes/pagesRoutes"));
-  app.use("/api/page", require("./backend/routes/pagesRoutes"));
-
-  // Other entities
-  app.use("/api/courses", require("./backend/routes/courseRoutes"));
-  app.use("/api/reports", require("./backend/routes/reportRoutes"));
-  app.use("/api/sales", require("./backend/routes/salesRoutes"));
-  app.use("/api/stationary", require("./backend/routes/stationaryRoutes"));
-  app.use("/api/business", require("./backend/routes/businessRoutes"));
-  app.use("/api/users", require("./backend/routes/userRoutes"));
-
-  // Fallback 404 handler
   app.use((req, res) => {
     console.warn(`[Local Server 404] No local route matched: ${req.method} ${req.originalUrl}`);
     res.status(404).json({ message: `Local endpoint ${req.originalUrl} not found` });

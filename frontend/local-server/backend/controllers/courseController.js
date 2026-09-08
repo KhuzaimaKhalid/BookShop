@@ -1,5 +1,4 @@
 const db = require('../config/connectDB');
-const { put, del } = require('@vercel/blob');
 
 const createCourse = async (req, res) => {
     try {

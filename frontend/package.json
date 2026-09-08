@@ -10,55 +10,64 @@
     "company": "Trust Nexus"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "vite build",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
     "lint": "eslint .",
     "preview": "vite preview",
     "sync-backend": "node scripts/sync-backend.cjs",
-    "electron": "cross-env ELECTRON_START_URL=http://localhost:5173 electron .",
-    "electron:dev": "npm run sync-backend && concurrently \"npm run dev\" \"wait-on http-get://localhost:5173 && npm run electron\"",
-    "predist": "npm run sync-backend",
-    "dist": "npm run build && electron-builder"
+    "electron": "cross-env ELECTRON_START_URL=http://127.0.0.1:5173 electron .",
+    "electron:dev": "npm run sync-backend && concurrently -k \"npm run dev\" \"wait-on http://127.0.0.1:5173 && npm run electron\"",
+    "postinstall": "electron-builder install-app-deps",
+    "predist": "npm run sync-backend && npm run rebuild",
+    "dist": "npm run build && electron-builder --win -c.npmRebuild=false"
   },
   "build": {
-    "appId": "com.trustnexus.shahidbookdepot",
-    "productName": "Shahid Book Depot",
-    "copyright": "Copyright © 2026 Trust Nexus / Khuzaima Khalid",
-    "files": [
-      ".env",
-      "dist/**/*",
-      "src/assets/**/*",
-      "main.js",
-      "preload.cjs",
-      "local-server/**/*",
-      "node_modules/**/*",
-      "package.json"
-    ],
-    "asarUnpack": [
-      "node_modules/@libsql/**"
-    ],
-    "directories": {
-      "output": "release"
-    },
-    "win": {
-      "target": "nsis",
-      "publisherName": "Trust Nexus",
-      "icon": "src/assets/logo.ico"
-    },
-    "nsis": {
-      "installerIcon": "src/assets/logo.ico",
-      "uninstallerIcon": "src/assets/logo.ico",
-      "uninstallDisplayName": "Shahid Book Depot",
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+  "appId": "com.trustnexus.shahidbookdepot",
+  "productName": "Shahid Book Depot",
+  "copyright": "Copyright © 2026 Trust Nexus / Khuzaima Khalid",
+  "files": [
+    "dist/**/*",
+    "src/assets/**/*",
+    "main.js",
+    "preload.cjs",
+    "local-server/**/*",
+    "package.json"
+  ],
+  "asarUnpack": [
+    "**/node_modules/better-sqlite3/**"
+  ],
+  "directories": {
+    "output": "dist-release"
   },
+  "win": {
+    "target": "nsis",
+    "publisherName": "Trust Nexus",
+    "icon": "src/assets/logo.ico"
+  },
+  "extraResources": [
+    {
+      "from": ".env",
+      "to": ".env"
+    },
+    {
+      "from": "../Backend/BookShop.db",
+      "to": "BookShop.db"
+    }
+  ],
+  "nsis": {
+    "installerIcon": "src/assets/logo.ico",
+    "uninstallerIcon": "src/assets/logo.ico",
+    "uninstallDisplayName": "Shahid Book Depot",
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  }
+},
   "dependencies": {
-    "@libsql/client": "^0.18.0",
     "@tailwindcss/vite": "^4.3.3",
-    "@vercel/blob": "^2.8.0",
     "axios": "^1.18.1",
     "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -74,6 +83,7 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "@eslint/js": "^10.0.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

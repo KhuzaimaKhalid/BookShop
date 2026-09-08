@@ -1,5 +1,20 @@
 const db = require('../config/connectDB');
-const { put, del } = require('@vercel/blob');
+const fs = require('fs');
+const path = require('path');
+
+const IMAGES_DIR = path.join(__dirname, '..', 'images', 'products');
+
+function saveImageFile(file) {
+    const filename = `${Date.now()}-${file.originalname}`;
+    fs.writeFileSync(path.join(IMAGES_DIR, filename), file.buffer);
+    return filename;
+}
+
+function deleteImageFile(filename) {
+    if (!filename) return;
+    const filePath = path.join(IMAGES_DIR, filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+}
 
 const createProduct = async (req, res) => {
     try {
@@ -9,14 +24,9 @@ const createProduct = async (req, res) => {
         return res.status(400).json({ message: "Required fields are missing" });
       }
   
-      let imageUrl = null;
-  
+      let imageFilename = null;
       if (req.file) {
-        const blob = await put(`products/${Date.now()}-${req.file.originalname}`, req.file.buffer, {
-          access: 'public',
-          token: process.env.BLOB_READ_WRITE_TOKEN
-        });
-        imageUrl = blob.url;
+        imageFilename = saveImageFile(req.file);
       }
   
       const sql = `
@@ -27,7 +37,7 @@ const createProduct = async (req, res) => {
       const info = await db.prepare(sql).run(
         category_id || null,
         name,
-        imageUrl,
+        imageFilename,
         purchase_price,
         selling_price,
         stock_quantity,
@@ -38,7 +48,7 @@ const createProduct = async (req, res) => {
       return res.status(201).json({
         message: "Product created successfully",
         productId: Number(info.lastInsertRowid),
-        image: imageUrl
+        image: imageFilename
       });
     } catch (error) {
       console.error(error);
@@ -57,20 +67,14 @@ const updateProduct = async (req, res) => {
         if (!existing) {
             return res.status(404).json({ message: "Product not found" });
         }
-        let imageUrl = existing.image;
+        let imageFilename = existing.image;
         if (req.file) {
-            if (existing.image && existing.image.includes('public.blob.vercel-storage.com')) {
-                await del(existing.image);
-            }
-            const blob = await put(`products/${Date.now()}-${req.file.originalname}`, req.file.buffer, {
-                access: 'public',
-                token: process.env.BLOB_READ_WRITE_TOKEN
-            });
-            imageUrl = blob.url;
+            deleteImageFile(existing.image);
+            imageFilename = saveImageFile(req.file);
         }
         const sql = 'UPDATE products SET name = ?, image = ?, purchase_price = ?, selling_price = ?, stock_quantity = ?, min_stock_level = ?, status = ?, category_id = ? WHERE id = ?';
-        await db.prepare(sql).run(name, imageUrl, purchase_price, selling_price, stock_quantity, min_stock_level, status, category_id, id);
-        return res.status(200).json({ message: "Product updated successfully", image: imageUrl });
+        await db.prepare(sql).run(name, imageFilename, purchase_price, selling_price, stock_quantity, min_stock_level, status, category_id, id);
+        return res.status(200).json({ message: "Product updated successfully", image: imageFilename });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: "Server error" });
@@ -97,7 +101,6 @@ const deleteProduct = async (req, res) => {
 
 const getAllProducts = async (req, res) => {
     try {
-        // Only return products whose associated category is not soft-deleted
         const sql = `
             SELECT p.* 
             FROM products p

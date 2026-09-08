@@ -2,18 +2,27 @@ import { app, BrowserWindow } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createRequire } from "module";
+import dotenv from "dotenv";
 
 const require = createRequire(import.meta.url);
 const { createLocalServer } = require("./local-server");
-
-try {
-  await import("dotenv/config");
-} catch (e) {
-  console.log("dotenv not loaded or running in production environment");
-}
+const { ensureDbExists } = require("./local-server/backend/config/ensureDB");
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load .env from an absolute path — process.cwd() is unreliable in a
+// packaged app, so we anchor to resourcesPath (prod) or __dirname (dev).
+const envPath = app.isPackaged
+  ? path.join(process.resourcesPath, ".env")
+  : path.join(__dirname, ".env");
+
+const result = dotenv.config({ path: envPath });
+if (result.error) {
+  console.error(`Failed to load .env from ${envPath}:`, result.error.message);
+} else {
+  console.log(`Loaded .env from ${envPath}`);
+}
 
 app.setAboutPanelOptions({
   applicationName: "Shahid Book Depot",
@@ -26,9 +35,10 @@ let mainWindow;
 let localServer;
 
 function startLocalServer() {
+  ensureDbExists();
   const expressApp = createLocalServer();
   localServer = expressApp.listen(4321, "127.0.0.1", () => {
-    console.log("Local read server running on http://127.0.0.1:4321");
+    console.log("Local server running on http://127.0.0.1:4321");
   });
 }
 
@@ -43,6 +53,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: false,
       preload: path.join(__dirname, "preload.cjs"),
     },
   });
@@ -50,14 +61,18 @@ function createWindow() {
   mainWindow.maximize();
   mainWindow.once("ready-to-show", () => mainWindow.show());
 
-  const startUrl = process.env.ELECTRON_START_URL;
-  if (startUrl) {
-    mainWindow.loadURL(startUrl);
+  const isDev = !app.isPackaged;
+  const devUrl = process.env.ELECTRON_START_URL || "http://127.0.0.1:5173";
+
+  if (isDev) {
+    mainWindow.loadURL(devUrl);
   } else {
     mainWindow.loadFile(path.join(__dirname, "dist/index.html"));
   }
 
-  mainWindow.on("closed", () => { mainWindow = null; });
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
 }
 
 app.whenReady().then(() => {

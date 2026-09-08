@@ -1,57 +1,57 @@
-const { createClient } = require("@libsql/client");
-const fs = require("fs");
 const path = require("path");
-const os = require("os");
+const Database = require("better-sqlite3");
 
-const dbDir = path.join(os.homedir(), ".shahid-book-depot");
-fs.mkdirSync(dbDir, { recursive: true });
-const dbFile = path.join(dbDir, "local-replica.db");
+// Inside the packaged app, store the DB next to the app's writable data,
+// not inside the read-only installed app folder.
+const { app } = require("electron");
+const DB_PATH = app && app.isPackaged
+  ? path.join(app.getPath("userData"), "BookShop.db")
+  : path.join(__dirname, "..", "..", "..", "..", "Backend", "BookShop.db"); // dev: points at Backend/BookShop.db// dev: points at Backend/BookShop.db
 
-const client = createClient({
-  url: `file:${dbFile}`,
-  syncUrl: process.env.TURSO_DATABASE_URL,
-  authToken: process.env.TURSO_READONLY_TOKEN,
-  syncInterval: 30,
-});
+const sqlite = new Database(DB_PATH);
+sqlite.pragma("journal_mode = WAL");
+sqlite.pragma("foreign_keys = ON");
 
-async function checkConnection() {
-  try {
-    await client.sync();
-    console.log("Local Turso replica synced.");
-  } catch (error) {
-    console.error("Local replica sync failed:", error.message);
-  }
-}
-checkConnection();
+console.log(`[local-server] SQLite connected at ${DB_PATH}`);
 
-const parseArgs = (args) => {
-  if (args.length === 1 && (Array.isArray(args[0]) || typeof args[0] === "object")) {
-    return args[0];
+function normalizeArgs(args) {
+  if (args.length === 1 && (Array.isArray(args[0]) || (typeof args[0] === "object" && args[0] !== null))) {
+    return Array.isArray(args[0]) ? args[0] : [args[0]];
   }
   return args;
-};
+}
 
 function makePrepare(executor) {
-  return (sql) => ({
-    all: async (...args) => {
-      const res = await executor.execute({ sql, args: parseArgs(args) });
-      return res.rows;
-    },
-    get: async (...args) => {
-      const res = await executor.execute({ sql, args: parseArgs(args) });
-      return res.rows[0] || null;
-    },
-    run: async (...args) => {
-      const res = await executor.execute({ sql, args: parseArgs(args) });
-      return { changes: res.rowsAffected, lastInsertRowid: res.lastInsertRowid };
-    },
-  });
+  return (sql) => {
+    const stmt = executor.prepare(sql);
+    return {
+      all: (...args) => stmt.all(...normalizeArgs(args)),
+      get: (...args) => stmt.get(...normalizeArgs(args)),
+      run: (...args) => {
+        const info = stmt.run(...normalizeArgs(args));
+        return { changes: info.changes, lastInsertRowid: info.lastInsertRowid };
+      },
+    };
+  };
 }
 
 const db = {
-  execute: (stmt) => client.execute(stmt),
-  prepare: makePrepare(client),
-  sync: () => client.sync(),
+  execute: (sql) => sqlite.exec(sql),
+  prepare: makePrepare(sqlite),
+  transaction: (fn) => {
+    return async (...callArgs) => {
+      const txDb = { prepare: makePrepare(sqlite) };
+      sqlite.exec("BEGIN");
+      try {
+        const result = await fn(txDb, ...callArgs);
+        sqlite.exec("COMMIT");
+        return result;
+      } catch (error) {
+        sqlite.exec("ROLLBACK");
+        throw error;
+      }
+    };
+  },
 };
 
 module.exports = db;
