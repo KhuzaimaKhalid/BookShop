@@ -25,6 +25,7 @@
     "productName": "Shahid Book Depot",
     "copyright": "Copyright © 2026 Trust Nexus / Khuzaima Khalid",
     "files": [
+      ".env",
       "dist/**/*",
       "src/assets/**/*",
       "main.js",
