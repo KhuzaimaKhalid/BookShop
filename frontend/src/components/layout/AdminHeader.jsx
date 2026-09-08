@@ -38,10 +38,10 @@ const AdminHeader = ({ onMenuClick }) => {
   const totalLength = businessName.length;
 
   const getFontSizeClass = (length) => {
-    if (length <= 10) return "text-base sm:text-2xl lg:text-3xl";
-    if (length <= 16) return "text-sm sm:text-xl lg:text-2xl";
-    if (length <= 24) return "text-xs sm:text-lg lg:text-xl";
-    return "text-[10px] sm:text-base lg:text-lg";
+    if (length <= 10) return "text-base sm:text-2xl lg:text-3xl [&_*]:!text-[#CD051F]";
+    if (length <= 16) return "text-sm sm:text-xl lg:text-2xl [&_*]:!text-[#CD051F]";
+    if (length <= 24) return "text-xs sm:text-lg lg:text-xl [&_*]:!text-[#CD051F]";
+    return "text-[10px] sm:text-base lg:text-lg [&_*]:!text-[#CD051F]";
   };
 
   const fontSizeClass = getFontSizeClass(totalLength);

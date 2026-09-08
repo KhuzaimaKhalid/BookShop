@@ -14,8 +14,10 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "sync-backend": "node scripts/sync-backend.cjs",
     "electron": "cross-env ELECTRON_START_URL=http://localhost:5173 electron .",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on http-get://localhost:5173 && npm run electron\"",
+    "electron:dev": "npm run sync-backend && concurrently \"npm run dev\" \"wait-on http-get://localhost:5173 && npm run electron\"",
+    "predist": "npm run sync-backend",
     "dist": "npm run build && electron-builder"
   },
   "build": {
@@ -24,8 +26,15 @@
     "copyright": "Copyright © 2026 Trust Nexus / Khuzaima Khalid",
     "files": [
       "dist/**/*",
+      "src/assets/**/*",
       "main.js",
+      "preload.cjs",
+      "local-server/**/*",
+      "node_modules/**/*",
       "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/@libsql/**"
     ],
     "directories": {
       "output": "release"
@@ -34,14 +43,29 @@
       "target": "nsis",
       "publisherName": "Trust Nexus",
       "icon": "src/assets/logo.ico"
+    },
+    "nsis": {
+      "installerIcon": "src/assets/logo.ico",
+      "uninstallerIcon": "src/assets/logo.ico",
+      "uninstallDisplayName": "Shahid Book Depot",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@vercel/blob": "^2.8.0",
     "axios": "^1.18.1",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "file-saver": "^2.0.5",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.27.0",
+    "multer": "^2.3.0",
+    "nodemailer": "^10.0.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",

@@ -43,17 +43,30 @@ const CustomerTabs = ({
         <Plus size={16} strokeWidth={3} />
       </button>
 
+      {/* Previous Arrow Button */}
       <button
+        type="button"
         onClick={onScrollPrev}
         disabled={!canScrollPrev}
-        className="w-10 h-10 flex items-center justify-center rounded-lg bg-[#151B26] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#20293b] transition"
+        className={`w-10 h-10 flex items-center justify-center rounded-lg text-white transition ${
+          canScrollPrev
+            ? "bg-[#CD051F] hover:bg-red-700 cursor-pointer"
+            : "bg-[#151B26] cursor-not-allowed"
+        }`}
       >
         <ArrowLeft size={16} />
       </button>
+
+      {/* Next Arrow Button */}
       <button
+        type="button"
         onClick={onScrollNext}
         disabled={!canScrollNext}
-        className="w-10 h-10 flex items-center justify-center rounded-lg bg-[#CD051F] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-red-700 transition"
+        className={`w-10 h-10 flex items-center justify-center rounded-lg text-white transition ${
+          canScrollNext
+            ? "bg-[#CD051F] hover:bg-red-700 cursor-pointer"
+            : "bg-[#151B26] cursor-not-allowed"
+        }`}
       >
         <ArrowRight size={16} />
       </button>

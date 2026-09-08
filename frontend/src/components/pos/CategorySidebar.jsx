@@ -36,7 +36,13 @@ const CategorySidebar = ({
   mobileOpen,
   onClose,
 }) => {
-  const safeCategories = Array.isArray(categories) ? categories : [];
+  const safeCategories = (Array.isArray(categories) ? categories : []).filter(
+    (cat) =>
+      cat.is_delete !== 1 &&
+      cat.is_delete !== "1" &&
+      cat.is_delete !== true &&
+      cat.status?.toLowerCase() !== "inactive"
+  );
 
   return (
     <>

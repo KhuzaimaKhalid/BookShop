@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import api from "../../services/api";
 import POSHeader from "../../components/pos/POSHeader";
 import CategorySidebar from "../../components/pos/CategorySidebar";
@@ -11,6 +11,7 @@ import { useCart } from "../../context/CartContext";
 
 const POSPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [pages, setPages] = useState([]);
   const [selectedPageId, setSelectedPageId] = useState(null);
@@ -23,6 +24,8 @@ const POSPage = () => {
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
 
   const [invoiceSaleId, setInvoiceSaleId] = useState(null);
+
+  const initializedRef = useRef(false);
 
   const {
     customers,
@@ -69,7 +72,26 @@ const POSPage = () => {
           : Array.isArray(categoriesRes.data)
           ? categoriesRes.data
           : [];
-        setCategories(fetchedCategories);
+          const activeCategories = fetchedCategories.filter(
+            (cat) => Number(cat.is_delete) !== 1 && cat.status?.toLowerCase() !== "inactive"
+          );
+          setCategories(activeCategories);
+
+        // If we arrived here from a category click on another page (Course/Expense/Returns),
+        // switch to that category's page and select it directly.
+        const incomingCategoryId = location.state?.categoryId;
+        if (incomingCategoryId !== undefined && incomingCategoryId !== null) {
+          const matchedCategory = activeCategories.find(
+            (cat) => String(cat.id) === String(incomingCategoryId)
+          );
+          if (matchedCategory) {
+            const catPageId = matchedCategory.page_id ?? matchedCategory.pageId ?? matchedCategory.page;
+            if (catPageId !== undefined && catPageId !== null) {
+              setSelectedPageId(catPageId);
+            }
+          }
+          setSelectedCategoryId(incomingCategoryId);
+        }
 
         const rawProducts = Array.isArray(productsRes.data?.products)
           ? productsRes.data.products
@@ -88,6 +110,12 @@ const POSPage = () => {
   }, []);
 
   useEffect(() => {
+    if (!initializedRef.current) {
+      // Skip the reset on the very first render/page selection so an incoming
+      // category (from Course/Expense/Returns) isn't wiped out immediately.
+      initializedRef.current = true;
+      return;
+    }
     setSelectedCategoryId(null);
   }, [selectedPageId]);
 
@@ -156,45 +184,44 @@ const POSPage = () => {
     });
   };
 
-  const handleSaveBill = async () => {
-    if (activeCart.items.length === 0) return null;
+  // POSPage.jsx - Inside POSPage component
 
-    const subtotal = activeCart.items.reduce((sum, i) => sum + i.qty * i.price, 0);
-    const labor = Number(activeCart.laborCharges) || 0;
-    const paid = Number(activeCart.paidAmount) || 0;
+const handleSaveBill = async () => {
+  if (activeCart.items.length === 0) return null;
 
-    if (paid < (subtotal + labor)) {
-      alert("Paid amount is less than total.");
-      return null;
-    }
+  const subtotal = activeCart.items.reduce((sum, i) => sum + i.qty * i.price, 0);
+  const labor = Number(activeCart.laborCharges) || 0;
+  
+  // Default paid amount to total if paid_amount was removed or left blank
+  const paid = Number(activeCart.paidAmount) || (subtotal + labor);
 
-    setSaving(true);
-    try {
-      const res = await api.post("/sales", {
-        items: activeCart.items.map((i) => ({
-          product_id: i.product_id,
-          qty: i.qty,
-          price: i.price,
-        })),
-        labor_charges: labor,
-        paid_amount: paid,
-      });
-      updateActiveCart((cart) => ({
-        ...cart,
-        invoiceNo: res.data.invoice_no,
-        saleId: res.data.sale_id,
-      }));
+  setSaving(true);
+  try {
+    const res = await api.post("/sales", {
+      items: activeCart.items.map((i) => ({
+        product_id: i.product_id,
+        qty: i.qty,
+        price: i.price,
+      })),
+      labor_charges: labor,
+      paid_amount: paid,
+    });
+    updateActiveCart((cart) => ({
+      ...cart,
+      invoiceNo: res.data.invoice_no,
+      saleId: res.data.sale_id,
+    }));
 
-      await refreshProducts();
-      return res.data;
-    } catch (error) {
-      console.error("Error saving bill:", error);
-      alert(error?.response?.data?.message || "Failed to save bill.");
-      return null;
-    } finally {
-      setSaving(false);
-    }
-  };
+    await refreshProducts();
+    return res.data;
+  } catch (error) {
+    console.error("Error saving bill:", error);
+    alert(error?.response?.data?.message || "Failed to save bill.");
+    return null;
+  } finally {
+    setSaving(false);
+  }
+};
 
   const handlePrint = async () => {
     if (activeCart.items.length === 0) return;

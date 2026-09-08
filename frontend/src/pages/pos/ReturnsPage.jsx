@@ -1,13 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Receipt, RotateCcw, AlertCircle, CheckCircle2 } from "lucide-react";
 import api from "../../services/api";
 import POSHeader from "../../components/pos/POSHeader";
 import CategorySidebar from "../../components/pos/CategorySidebar";
 
 const ReturnsPage = () => {
+  const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const [pages, setPages] = useState([]);
+  const [selectedPageId, setSelectedPageId] = useState(null);
 
   const [invoiceNoInput, setInvoiceNoInput] = useState("");
   const [loadingInvoice, setLoadingInvoice] = useState(false);
@@ -20,16 +25,44 @@ const ReturnsPage = () => {
   const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
-    const fetchCategories = async () => {
+    const fetchCategoriesAndPages = async () => {
       try {
-        const res = await api.get("/categories");
-        setCategories(Array.isArray(res.data?.categories) ? res.data.categories : []);
+        const [categoriesRes, pagesRes] = await Promise.all([
+          api.get("/categories").catch(() => ({ data: { categories: [] } })),
+          api.get("/pages").catch(() => ({ data: [] })),
+        ]);
+
+        const fetchedCategories = Array.isArray(categoriesRes.data?.categories)
+          ? categoriesRes.data.categories
+          : [];
+        const activeCategories = fetchedCategories.filter(
+          (cat) => Number(cat.is_delete) !== 1 && cat.status?.toLowerCase() !== "inactive"
+        );
+        setCategories(activeCategories);
+
+        const fetchedPages = Array.isArray(pagesRes.data?.pages)
+          ? pagesRes.data.pages
+          : Array.isArray(pagesRes.data)
+            ? pagesRes.data
+            : [];
+        setPages(fetchedPages);
+        if (fetchedPages.length > 0) {
+          setSelectedPageId(fetchedPages[0].id ?? fetchedPages[0]._id ?? fetchedPages[0].page_id);
+        }
       } catch (err) {
         console.error("Error loading categories:", err);
       }
     };
-    fetchCategories();
+    fetchCategoriesAndPages();
   }, []);
+
+  const filteredCategories = useMemo(() => {
+    if (!selectedPageId) return categories;
+    return categories.filter((cat) => {
+      const catPageId = cat.page_id ?? cat.pageId ?? cat.page;
+      return String(catPageId) === String(selectedPageId);
+    });
+  }, [categories, selectedPageId]);
 
   // 1. Fetch Invoice Details from Backend
   const handleLoadInvoice = async (e) => {
@@ -115,17 +148,20 @@ const ReturnsPage = () => {
     returnItems.reduce((sum, item) => sum + item.returnQty * item.price, 0);
 
   return (
-    <div className="min-h-screen w-full bg-[#F8F9FA] flex flex-col">
-      <POSHeader searchTerm={searchTerm} onSearchChange={setSearchTerm} />
+    <div className="h-screen w-full bg-[#F8F9FA] flex flex-col overflow-hidden">
+      <POSHeader searchTerm={searchTerm} onSearchChange={setSearchTerm} showDashboardLink={true} />
 
-      <div className="flex flex-1">
+      <div className="flex flex-1 relative overflow-hidden">
         <CategorySidebar
-          categories={categories}
+          categories={filteredCategories}
           selectedCategoryId={selectedCategoryId}
-          onSelectCategory={setSelectedCategoryId}
+          onSelectCategory={(catId) => {
+            setSelectedCategoryId(catId);
+            navigate("/pos", { state: { categoryId: catId } });
+          }}
         />
 
-        <main className="flex-1 p-8 flex flex-col gap-6">
+        <main className="flex-1 p-8 flex flex-col gap-6 overflow-y-auto">
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">RETURN</h1>
 
           {/* Search Box Card */}

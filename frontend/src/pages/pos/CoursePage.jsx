@@ -24,6 +24,10 @@ const CoursePage = () => {
 
   const [invoiceSaleId, setInvoiceSaleId] = useState(null);
 
+  // Page state (for filtering categories by page, same as POSPage)
+  const [pages, setPages] = useState([]);
+  const [selectedPageId, setSelectedPageId] = useState(null);
+
   const {
     customers,
     activeIndex,
@@ -54,12 +58,23 @@ const CoursePage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [coursesRes, stationeriesRes, productsRes, categoriesRes] = await Promise.all([
+      const [coursesRes, stationeriesRes, productsRes, categoriesRes, pagesRes] = await Promise.all([
         api.get("/courses").catch(() => ({ data: [] })),
         api.get("/stationary/all").catch(() => ({ data: [] })),
         api.get("/product").catch(() => api.get("/products")).catch(() => ({ data: [] })),
         api.get("/categories").catch(() => ({ data: { categories: [] } })),
+        api.get("/pages").catch(() => ({ data: [] })),
       ]);
+
+      const fetchedPages = Array.isArray(pagesRes.data?.pages)
+        ? pagesRes.data.pages
+        : Array.isArray(pagesRes.data)
+          ? pagesRes.data
+          : [];
+      setPages(fetchedPages);
+      if (fetchedPages.length > 0 && !selectedPageId) {
+        setSelectedPageId(fetchedPages[0].id ?? fetchedPages[0]._id ?? fetchedPages[0].page_id);
+      }
 
       const fetchedCourses = Array.isArray(coursesRes.data)
         ? coursesRes.data
@@ -83,7 +98,10 @@ const CoursePage = () => {
         : Array.isArray(categoriesRes.data)
           ? categoriesRes.data
           : [];
-      setCategories(fetchedCategories);
+      const activeCategories = fetchedCategories.filter(
+        (cat) => Number(cat.is_delete) !== 1 && cat.status?.toLowerCase() !== "inactive"
+      );
+      setCategories(activeCategories);
     } catch (err) {
       console.error("Error fetching page data:", err);
     } finally {
@@ -94,6 +112,14 @@ const CoursePage = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const filteredCategories = useMemo(() => {
+    if (!selectedPageId) return categories;
+    return categories.filter((cat) => {
+      const catPageId = cat.page_id ?? cat.pageId ?? cat.page;
+      return String(catPageId) === String(selectedPageId);
+    });
+  }, [categories, selectedPageId]);
 
   const calculateBundlePrice = (bundleItem) => {
     if (bundleItem?.total_price !== undefined && bundleItem?.total_price !== null) {
@@ -118,35 +144,42 @@ const CoursePage = () => {
     const itemId = isStationery
       ? item.stationary_id || item.id
       : item.course_id || item.id;
-
+  
     try {
       const endpoint = isStationery
         ? `/stationary/products/${itemId}`
         : `/courses/${itemId}/products`;
-
+  
       const res = await api.get(endpoint);
       const bundleItems = res.data?.products || [];
-
+  
       if (bundleItems.length === 0) {
         alert(
           `This ${isStationery ? "stationery package" : "course"} has no products added yet.`
         );
         return;
       }
-
+  
       updateActiveCart((cart) => {
         let updatedItems = [...cart.items];
-
+  
         bundleItems.forEach((p) => {
-          const productId = p.id;
+          // Fallback through possible ID field names
+          const rawId = p.product_id ?? p.id ?? p._id;
+          const productId = typeof rawId === 'string' 
+            ? Number(rawId.replace(/\D/g, '')) 
+            : Number(rawId);
+  
+          if (!productId || isNaN(productId)) return;
+  
           const bundleQty = isStationery
             ? p.stationary_quantity || 1
             : p.course_quantity || 1;
-
+  
           const existingIndex = updatedItems.findIndex(
-            (i) => i.product_id === productId
+            (i) => Number(i.product_id) === productId
           );
-
+  
           if (existingIndex >= 0) {
             updatedItems[existingIndex] = {
               ...updatedItems[existingIndex],
@@ -156,13 +189,13 @@ const CoursePage = () => {
             updatedItems.push({
               product_id: productId,
               name: p.name,
-              price: p.selling_price,
+              price: Number(p.selling_price || p.price || 0),
               qty: bundleQty,
               maxStock: p.stock_quantity ?? 999,
             });
           }
         });
-
+  
         return { ...cart, items: updatedItems };
       });
     } catch (err) {
@@ -173,33 +206,52 @@ const CoursePage = () => {
 
   const handleSaveBill = async () => {
     if (activeCart.items.length === 0) return null;
-    const subtotal = activeCart.items.reduce((sum, i) => sum + i.qty * i.price, 0);
-    const paid = Number(activeCart.paidAmount) || 0;
 
-    if (paid < subtotal) {
-      alert("Paid amount is less than total.");
+    // Calculate total bill amount
+    const calculatedTotal = activeCart.items.reduce(
+      (sum, item) => sum + (Number(item.price) || 0) * (Number(item.qty) || 1),
+      0
+    );
+
+    // If paidAmount is 0 or not entered, default to total bill amount
+    const rawPaid = Number(activeCart.paidAmount);
+    const paid = rawPaid > 0 ? rawPaid : calculatedTotal;
+
+    // Filter and sanitize items to ensure product_id is valid
+    const sanitizedItems = activeCart.items
+      .map((i) => {
+        const rawId = i.product_id ?? i.id ?? i._id;
+        const cleanId = typeof rawId === 'string' ? Number(rawId.replace(/\D/g, '')) : Number(rawId);
+        return {
+          product_id: cleanId,
+          qty: Number(i.qty) || 1,
+          price: Number(i.price) || 0,
+        };
+      })
+      .filter((i) => Boolean(i.product_id) && !isNaN(i.product_id));
+
+    if (sanitizedItems.length === 0) {
+      alert("Cart contains invalid products.");
       return null;
     }
 
     setSaving(true);
     try {
       const res = await api.post("/sales", {
-        items: activeCart.items.map((i) => ({
-          product_id: i.product_id,
-          qty: i.qty,
-          price: i.price,
-        })),
+        items: sanitizedItems,
         paid_amount: paid,
       });
+      
       updateActiveCart((cart) => ({
         ...cart,
         invoiceNo: res.data.invoice_no,
         saleId: res.data.sale_id,
+        paidAmount: paid,
       }));
       return res.data;
     } catch (error) {
       console.error("Error saving bill:", error);
-      alert("Failed to save bill.");
+      alert(error.response?.data?.message || "Failed to save bill.");
       return null;
     } finally {
       setSaving(false);
@@ -239,7 +291,11 @@ const CoursePage = () => {
           ? `/stationary/products/${targetId}`
           : `/courses/${targetId}/products`;
         const res = await api.get(endpoint);
-        const fetchedProds = res.data.products || res.data || [];
+        const rawProds = res.data.products || res.data || [];
+        const fetchedProds = rawProds.map((p) => ({
+          ...p,
+          quantity: Number(p.quantity ?? p.course_quantity ?? p.stationary_quantity ?? 1) || 1,
+        }));
         setBundleProducts(fetchedProds);
       } catch (err) {
         console.error("Error loading bundle products:", err);
@@ -257,7 +313,7 @@ const CoursePage = () => {
     const prodId = product.product_id || product.id;
     if (bundleProducts.some((p) => (p.product_id || p.id) === prodId)) return;
 
-    setBundleProducts((prev) => [...prev, product]);
+    setBundleProducts((prev) => [...prev, { ...product, quantity: 1 }]);
   };
 
   const handleRemoveProductFromBundleModal = (productId) => {
@@ -266,9 +322,39 @@ const CoursePage = () => {
     );
   };
 
+  const handleBundleQtyIncrement = (productId) => {
+    setBundleProducts((prev) =>
+      prev.map((p) => {
+        const pid = p.product_id || p.id;
+        if (pid !== productId) return p;
+
+        const stock = p.stock_quantity !== undefined && p.stock_quantity !== null
+          ? Number(p.stock_quantity)
+          : Infinity;
+        const currentQty = Number(p.quantity) || 1;
+
+        if (currentQty >= stock) return p; // can't exceed available stock
+        return { ...p, quantity: currentQty + 1 };
+      })
+    );
+  };
+
+  const handleBundleQtyDecrement = (productId) => {
+    setBundleProducts((prev) =>
+      prev.map((p) => {
+        const pid = p.product_id || p.id;
+        if (pid !== productId) return p;
+
+        const currentQty = Number(p.quantity) || 1;
+        if (currentQty <= 1) return p; // can't go below 1
+        return { ...p, quantity: currentQty - 1 };
+      })
+    );
+  };
+
   const modalTotal = useMemo(() => {
     return bundleProducts.reduce(
-      (sum, p) => sum + Number(p.selling_price || p.price || 0),
+      (sum, p) => sum + Number(p.selling_price || p.price || 0) * (Number(p.quantity) || 1),
       0
     );
   }, [bundleProducts]);
@@ -279,60 +365,55 @@ const CoursePage = () => {
       return;
     }
 
+    if (bundleProducts.length === 0) {
+      alert("Please add at least one item to the bundle before adding to bill.");
+      return;
+    }
+
     try {
-      if (isStationeryType) {
-        let targetStationaryId = editingItem?.stationary_id || editingItem?.id;
+      updateActiveCart((cart) => {
+        let updatedItems = [...cart.items];
 
-        if (isNewBundle) {
-          const createRes = await api.post("/stationary/create", {
-            title: bundleNameInput.trim(),
-          });
-          targetStationaryId =
-            createRes.data?.stationary?.stationary_id || createRes.data?.stationary_id;
-        }
+        bundleProducts.forEach((p) => {
+          // Extract & clean product_id
+          const rawId = p.product_id ?? p.id ?? p._id;
+          const productId = typeof rawId === 'string' ? Number(rawId.replace(/\D/g, '')) : Number(rawId);
 
-        if (targetStationaryId && bundleProducts.length > 0) {
-          await Promise.all(
-            bundleProducts.map((p) =>
-              api.post("/stationary/update-product", {
-                stationary_id: targetStationaryId,
-                product_id: p.product_id || p.id,
-                action: "set",
-                quantity: 1,
-              })
-            )
+          if (!productId) {
+            console.error("Invalid product ID found in bundle:", p);
+            return;
+          }
+
+          const bundleQty = Number(p.quantity) || 1;
+          const price = Number(p.selling_price || p.price || 0);
+
+          const existingIndex = updatedItems.findIndex(
+            (i) => Number(i.product_id) === productId
           );
-        }
-      } else {
-        let targetCourseId = editingItem?.course_id || editingItem?.id;
 
-        if (isNewBundle) {
-          const createRes = await api.post("/courses", {
-            title: bundleNameInput.trim(),
-          });
-          targetCourseId =
-            createRes.data?.course?.course_id || createRes.data?.course_id;
-        }
+          if (existingIndex >= 0) {
+            updatedItems[existingIndex] = {
+              ...updatedItems[existingIndex],
+              qty: updatedItems[existingIndex].qty + bundleQty,
+            };
+          } else {
+            updatedItems.push({
+              product_id: productId,
+              name: p.name,
+              price: price,
+              qty: bundleQty,
+              maxStock: p.stock_quantity ?? 999,
+            });
+          }
+        });
 
-        if (targetCourseId && bundleProducts.length > 0) {
-          await Promise.all(
-            bundleProducts.map((p) =>
-              api.put("/courses/products", {
-                course_id: targetCourseId,
-                product_id: p.product_id || p.id,
-                action: "set",
-                quantity: 1,
-              })
-            )
-          );
-        }
-      }
+        return { ...cart, items: updatedItems };
+      });
 
-      await fetchData();
       setEditingItem(null);
     } catch (err) {
-      console.error("Error saving item:", err.response?.data || err.message);
-      alert(err.response?.data?.message || "Failed to save changes.");
+      console.error("Error adding bundle to bill:", err);
+      alert("Failed to add items to bill.");
     }
   };
 
@@ -347,9 +428,12 @@ const CoursePage = () => {
 
       <div className="flex flex-1 relative overflow-hidden">
         <CategorySidebar
-          categories={categories}
+          categories={filteredCategories}
           selectedCategoryId={selectedCategoryId}
-          onSelectCategory={setSelectedCategoryId}
+          onSelectCategory={(catId) => {
+            setSelectedCategoryId(catId);
+            navigate("/pos", { state: { categoryId: catId } });
+          }}
           mobileOpen={mobileCategoryOpen}
           onClose={() => setMobileCategoryOpen(false)}
         />
@@ -571,15 +655,49 @@ const CoursePage = () => {
                 <div className="space-y-2.5">
                   {bundleProducts.map((p, index) => {
                     const prodId = p.product_id || p.id;
+                    const qty = Number(p.quantity) || 1;
+                    const stock = p.stock_quantity !== undefined && p.stock_quantity !== null
+                      ? Number(p.stock_quantity)
+                      : Infinity;
+                    const unitPrice = Number(p.selling_price || p.price || 0);
+                    const canDecrement = qty > 1;
+                    const canIncrement = qty < stock;
+
                     return (
                       <div
                         key={prodId || `product-${index}`}
                         className="flex items-center justify-between text-xs border-b border-slate-100 pb-2"
                       >
-                        <span className="font-semibold text-slate-800">{p.name}</span>
-                        <div className="flex items-center gap-4">
-                          <span className="font-bold text-slate-900">
-                            Rs. {p.selling_price || p.price}
+                        <div className="flex-1 min-w-0 pr-2">
+                          <span className="font-semibold text-slate-800 block truncate">{p.name}</span>
+                          {Number.isFinite(stock) && (
+                            <span className="text-[10px] text-slate-400">In stock: {stock}</span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => handleBundleQtyDecrement(prodId)}
+                            disabled={!canDecrement}
+                            className="w-6 h-6 flex items-center justify-center rounded-md border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={canDecrement ? "Decrease quantity" : "Minimum quantity is 1"}
+                          >
+                            −
+                          </button>
+                          <span className="w-6 text-center font-bold text-slate-900">{qty}</span>
+                          <button
+                            onClick={() => handleBundleQtyIncrement(prodId)}
+                            disabled={!canIncrement}
+                            className="w-6 h-6 flex items-center justify-center rounded-md border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={canIncrement ? "Increase quantity" : "No more stock available"}
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-4 shrink-0 ml-4">
+                          <span className="font-bold text-slate-900 w-16 text-right">
+                            Rs. {(unitPrice * qty).toLocaleString()}
                           </span>
                           <button
                             onClick={() => handleRemoveProductFromBundleModal(prodId)}
@@ -613,7 +731,7 @@ const CoursePage = () => {
                 onClick={handleSaveBundleModal}
                 className="px-5 py-2 bg-[#CD051F] hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
               >
-                Save Changes
+                ADD TO BILL
               </button>
             </div>
           </div>

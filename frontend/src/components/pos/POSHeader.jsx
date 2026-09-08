@@ -37,10 +37,10 @@ const POSHeader = ({
   // Auto-adjust font size based on character count so it never overflows
   // (bumped up a size step across the board)
   const getFontSizeClass = (length) => {
-    if (length <= 10) return "text-lg sm:text-3xl lg:text-4xl";
-    if (length <= 16) return "text-base sm:text-2xl lg:text-3xl";
-    if (length <= 24) return "text-sm sm:text-xl lg:text-2xl";
-    return "text-xs sm:text-lg lg:text-xl";
+    if (length <= 10) return "text-lg sm:text-3xl lg:text-4xl [&_*]:!text-[#CD051F]";
+    if (length <= 16) return "text-base sm:text-2xl lg:text-3xl [&_*]:!text-[#CD051F]";
+    if (length <= 24) return "text-sm sm:text-xl lg:text-2xl [&_*]:!text-[#CD051F]";
+    return "text-xs sm:text-lg lg:text-xl [&_*]:!text-[#CD051F]";
   };
 
   const fontSizeClass = getFontSizeClass(totalLength);

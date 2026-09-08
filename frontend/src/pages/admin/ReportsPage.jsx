@@ -13,7 +13,7 @@ export default function ReportsPage() {
   const [toDate, setToDate] = useState("");
 
   const [salesTotal, setSalesTotal] = useState(0);
-  const [categorySales, setCategorySales] = useState([]);
+  const [pageSales, setPageSales] = useState([]);
   const [expenseTotal, setExpenseTotal] = useState(0);
   const [expensesList, setExpensesList] = useState([]);
   const [profitTotal, setProfitTotal] = useState(0);
@@ -31,8 +31,7 @@ export default function ReportsPage() {
         params = { from: fromDate, to: toDate };
       }
 
-      // Fetch from exact route definitions in reportRoutes.js & expenseRouter.js
-      const [salesRes, catSalesRes, expenseRes, profitRes] = await Promise.all([
+      const [salesRes, pageSalesRes, expenseRes, profitRes] = await Promise.all([
         api.get("/report/sales", { params }),
         api.get("/report/category-sales", { params }),
         api.get("/expenses"),
@@ -40,7 +39,7 @@ export default function ReportsPage() {
       ]);
 
       setSalesTotal(salesRes.data.total_sales || 0);
-      setCategorySales(catSalesRes.data || []);
+      setPageSales(pageSalesRes.data || []);
       setExpenseTotal(expenseRes.data.total_expense || 0);
       setExpensesList(expenseRes.data.expenses || []);
       setProfitTotal(profitRes.data.total_profit || 0);
@@ -52,13 +51,19 @@ export default function ReportsPage() {
     }
   };
 
-  // Format Category Sales for Pie Chart
-  const formattedCategoryData = categorySales.map((item) => ({
+  // Format Page Sales Amount for Sales Pie Chart
+  const formattedSalesData = pageSales.map((item) => ({
     name: item.name,
-    value: Number(item.total_sold) || 0,
+    value: Number(item.total_sales_amount) || 0,
   }));
 
-  // Format Expenses List for Pie Chart
+  // Format Page Profit Amount for Profit Pie Chart
+  const formattedProfitData = pageSales.map((item) => ({
+    name: item.name,
+    value: Number(item.total_profit_amount) || 0,
+  }));
+
+  // Format Expenses List for Expense Pie Chart
   const formattedExpenseData = expensesList.map((item) => ({
     name: item.name,
     value: Number(item.amount) || 0,
@@ -113,15 +118,15 @@ export default function ReportsPage() {
             <div className="h-52 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Tooltip />
+                  <Tooltip formatter={(val) => `Rs. ${val.toLocaleString()}`} />
                   <Pie
-                    data={formattedCategoryData.length > 0 ? formattedCategoryData : [{ name: 'No Sales', value: 1 }]}
+                    data={formattedSalesData.length > 0 ? formattedSalesData : [{ name: 'No Sales', value: 1 }]}
                     innerRadius={55}
                     outerRadius={85}
                     dataKey="value"
                   >
-                    {formattedCategoryData.length > 0 ? (
-                      formattedCategoryData.map((entry, idx) => (
+                    {formattedSalesData.length > 0 ? (
+                      formattedSalesData.map((entry, idx) => (
                         <Cell key={idx} fill={COLOR_PALETTE[idx % COLOR_PALETTE.length]} />
                       ))
                     ) : (
@@ -133,15 +138,15 @@ export default function ReportsPage() {
             </div>
 
             <div className="mt-4 space-y-1 text-left text-sm font-semibold max-h-36 overflow-y-auto pr-1">
-              {categorySales.length > 0 ? (
-                categorySales.map((cat, idx) => (
-                  <div key={cat.id || idx} className="flex justify-between" style={{ color: COLOR_PALETTE[idx % COLOR_PALETTE.length] }}>
-                    <span>{cat.name}</span>
-                    <span>{cat.total_sold} Sold</span>
+              {pageSales.length > 0 ? (
+                pageSales.map((item, idx) => (
+                  <div key={item.id || idx} className="flex justify-between" style={{ color: COLOR_PALETTE[idx % COLOR_PALETTE.length] }}>
+                    <span>{item.name}</span>
+                    <span>Rs. {Number(item.total_sales_amount).toLocaleString()}</span>
                   </div>
                 ))
               ) : (
-                <p className="text-gray-400 text-center font-normal">No Category Data</p>
+                <p className="text-gray-400 text-center font-normal">No Sales Data</p>
               )}
             </div>
           </div>
@@ -156,7 +161,7 @@ export default function ReportsPage() {
             <div className="h-52 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Tooltip />
+                  <Tooltip formatter={(val) => `Rs. ${val.toLocaleString()}`} />
                   <Pie
                     data={formattedExpenseData.length > 0 ? formattedExpenseData : [{ name: 'No Expenses', value: 1 }]}
                     innerRadius={55}
@@ -180,7 +185,7 @@ export default function ReportsPage() {
                 expensesList.map((exp, idx) => (
                   <div key={exp.id || idx} className="flex justify-between" style={{ color: COLOR_PALETTE[idx % COLOR_PALETTE.length] }}>
                     <span>{exp.name}</span>
-                    <span>Rs. {exp.amount}</span>
+                    <span>Rs. {Number(exp.amount).toLocaleString()}</span>
                   </div>
                 ))
               ) : (
@@ -199,15 +204,15 @@ export default function ReportsPage() {
             <div className="h-52 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Tooltip />
+                  <Tooltip formatter={(val) => `Rs. ${val.toLocaleString()}`} />
                   <Pie
-                    data={formattedCategoryData.length > 0 ? formattedCategoryData : [{ name: 'No Data', value: 1 }]}
+                    data={formattedProfitData.length > 0 ? formattedProfitData : [{ name: 'No Data', value: 1 }]}
                     innerRadius={55}
                     outerRadius={85}
                     dataKey="value"
                   >
-                    {formattedCategoryData.length > 0 ? (
-                      formattedCategoryData.map((entry, idx) => (
+                    {formattedProfitData.length > 0 ? (
+                      formattedProfitData.map((entry, idx) => (
                         <Cell key={idx} fill={COLOR_PALETTE[idx % COLOR_PALETTE.length]} />
                       ))
                     ) : (
@@ -219,15 +224,15 @@ export default function ReportsPage() {
             </div>
 
             <div className="mt-4 space-y-1 text-left text-sm font-semibold max-h-36 overflow-y-auto pr-1">
-              {categorySales.length > 0 ? (
-                categorySales.map((cat, idx) => (
-                  <div key={cat.id || idx} className="flex justify-between" style={{ color: COLOR_PALETTE[idx % COLOR_PALETTE.length] }}>
-                    <span>{cat.name}</span>
-                    <span>{cat.total_sold} Units</span>
+              {pageSales.length > 0 ? (
+                pageSales.map((item, idx) => (
+                  <div key={item.id || idx} className="flex justify-between" style={{ color: COLOR_PALETTE[idx % COLOR_PALETTE.length] }}>
+                    <span>{item.name}</span>
+                    <span>Rs. {Number(item.total_profit_amount).toLocaleString()}</span>
                   </div>
                 ))
               ) : (
-                <p className="text-gray-400 text-center font-normal">No Profit Data</p>
+                <p className="text-gray-400 text-center font-normal">No Page Data</p>
               )}
             </div>
           </div>

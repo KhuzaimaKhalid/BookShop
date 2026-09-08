@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Edit3, Plus, X } from "lucide-react";
+import { ArrowLeft, Plus, X } from "lucide-react";
 import api from "../../services/api";
 import POSHeader from "../../components/pos/POSHeader";
 import CategorySidebar from "../../components/pos/CategorySidebar";
@@ -44,29 +44,49 @@ const ExpensePage = () => {
   const [newExpenseDescription, setNewExpenseDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const [pages, setPages] = useState([]);
+  const [selectedPageId, setSelectedPageId] = useState(null);
+
   // Fetch Data from Backend API
   const fetchExpensesAndCategories = async () => {
     try {
       setLoading(true);
-      const [categoriesRes, expensesRes] = await Promise.all([
+      const [categoriesRes, expensesRes, pagesRes] = await Promise.all([
         api.get("/categories").catch(() => ({ data: { categories: [] } })),
         api.get("/expenses").catch(() => ({ data: { expenses: [] } })),
+        api.get("/pages").catch(() => ({ data: [] })),
       ]);
+
+      const fetchedPages = Array.isArray(pagesRes.data?.pages)
+        ? pagesRes.data.pages
+        : Array.isArray(pagesRes.data)
+          ? pagesRes.data
+          : [];
+      setPages(fetchedPages);
+      if (fetchedPages.length > 0 && !selectedPageId) {
+        setSelectedPageId(fetchedPages[0].id ?? fetchedPages[0]._id ?? fetchedPages[0].page_id);
+      }
+
+      
 
       const fetchedCategories = Array.isArray(categoriesRes.data?.categories)
         ? categoriesRes.data.categories
         : Array.isArray(categoriesRes.data)
-        ? categoriesRes.data
-        : [];
-      setCategories(fetchedCategories);
+          ? categoriesRes.data
+          : [];
+      const activeCategories = fetchedCategories.filter(
+        (cat) => Number(cat.is_delete) !== 1 && cat.status?.toLowerCase() !== "inactive"
+      );
+      setCategories(activeCategories);
 
       const fetchedExpenses = Array.isArray(expensesRes.data?.expenses)
         ? expensesRes.data.expenses
         : Array.isArray(expensesRes.data)
-        ? expensesRes.data
-        : [];
+          ? expensesRes.data
+          : [];
 
       setDbExpenses(fetchedExpenses);
+      
     } catch (err) {
       console.error("Error fetching expense data:", err);
     } finally {
@@ -77,6 +97,14 @@ const ExpensePage = () => {
   useEffect(() => {
     fetchExpensesAndCategories();
   }, []);
+
+  const filteredCategories = useMemo(() => {
+    if (!selectedPageId) return categories;
+    return categories.filter((cat) => {
+      const catPageId = cat.page_id ?? cat.pageId ?? cat.page;
+      return String(catPageId) === String(selectedPageId);
+    });
+  }, [categories, selectedPageId]);
 
   // Compute Total Sum for Recently Added
   const totalExpense = useMemo(() => {
@@ -154,13 +182,17 @@ const ExpensePage = () => {
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
         onMenuClick={() => setMobileCategoryOpen(true)}
+        showDashboardLink={true}
       />
 
       <div className="flex flex-1 relative overflow-hidden">
         <CategorySidebar
-          categories={categories}
+          categories={filteredCategories}
           selectedCategoryId={selectedCategoryId}
-          onSelectCategory={setSelectedCategoryId}
+          onSelectCategory={(catId) => {
+            setSelectedCategoryId(catId);
+            navigate("/pos", { state: { categoryId: catId } });
+          }}
           mobileOpen={mobileCategoryOpen}
           onClose={() => setMobileCategoryOpen(false)}
         />
@@ -193,27 +225,24 @@ const ExpensePage = () => {
 
               {loading ? (
                 <p className="text-xs text-slate-400">Loading expenses...</p>
-              ) : dbExpenses.length === 0 ? (
+              ) : dbExpenses.filter((item) => !item.is_other).length === 0 ? (
                 <p className="text-xs text-slate-400">No expenses found.</p>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {dbExpenses.map((item) => (
-                    <div
-                      key={item.id}
-                      className="bg-white border-2 border-slate-200 rounded-lg flex items-center justify-between p-3 shadow-sm hover:border-[#CD051F] transition"
-                    >
-                      <span className="text-xs font-bold text-slate-900 truncate pr-2">
-                        {item.name}
-                      </span>
+                  {dbExpenses
+                    .filter((item) => !item.is_other)
+                    .map((item) => (
                       <button
+                        key={item.id}
                         onClick={() => handleOpenEditAmount(item)}
-                        className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-md hover:bg-slate-800 transition shrink-0"
+                        className="bg-white border-2 border-slate-200 rounded-lg flex items-center justify-center p-3 shadow-sm hover:border-[#CD051F] transition text-center"
                         title={`Enter price for ${item.name}`}
                       >
-                        <Edit3 size={14} />
+                        <span className="text-xs font-bold text-slate-900 truncate">
+                          {item.name}
+                        </span>
                       </button>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
 
@@ -374,7 +403,9 @@ const ExpensePage = () => {
                   type="text"
                   required
                   value={newExpenseName}
-                  onChange={(e) => setNewExpenseName(e.target.value)}
+                  onChange={(e) =>
+                    setNewExpenseName(e.target.value.replace(/[0-9]/g, ""))
+                  }
                   placeholder="e.g. Generator Fuel"
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:border-[#CD051F]"
                 />

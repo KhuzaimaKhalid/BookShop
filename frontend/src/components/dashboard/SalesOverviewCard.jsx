@@ -23,22 +23,20 @@ const SalesOverviewCard = () => {
       try {
         setLoading(true);
 
-        // GET /api/report/daily-sales OR /api/report/monthly-sales
         const endpoint =
           range === "Daily Sales"
             ? "/report/daily-sales"
             : "/report/monthly-sales";
 
-            const response = await api.get(endpoint);
-            const data = Array.isArray(response.data) ? response.data : [];
-            
-            const formattedData = data.map((item) => ({
-              day: item.date || item.month || "N/A",
-              sales: item.total_sales || 0,
-            }));
-            
-            setSalesData(formattedData);
+        const response = await api.get(endpoint);
+        const data = Array.isArray(response.data) ? response.data : [];
 
+        const formattedData = data.map((item) => ({
+          day: item.date || item.month || "N/A",
+          sales: item.total_sales || 0,
+        }));
+
+        setSalesData(formattedData);
       } catch (error) {
         console.error("Error fetching sales overview chart:", error);
       } finally {
@@ -50,24 +48,27 @@ const SalesOverviewCard = () => {
   }, [range]);
 
   return (
-    <div className="relative mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-slate-900">Sales Overview</h3>
+    <div className="relative mb-2 bg-white p-2 border border-slate-200 rounded-lg shadow-sm">
+      <div className="flex items-center justify-between mb-1">
+        {/* Decreased heading size to text-[9px] */}
+        <h3 className="text-[9px] font-bold text-slate-900 leading-none uppercase tracking-wider">
+          Sales Overview
+        </h3>
 
         <div className="relative">
           <button
             onClick={() => setOpen((prev) => !prev)}
-            className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition"
+            className="flex items-center gap-1 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 text-[9px] font-semibold text-slate-700 hover:bg-slate-200 transition"
           >
             {range}
             <ChevronDown
-              size={14}
+              size={9}
               className={open ? "rotate-180 transition" : "transition"}
             />
           </button>
 
           {open && (
-            <div className="absolute right-0 mt-1 w-36 bg-white border border-slate-200 rounded-lg shadow-lg z-20 py-1">
+            <div className="absolute right-0 mt-1 w-28 bg-white border border-slate-200 rounded shadow-lg z-20 py-0.5">
               {RANGE_OPTIONS.map((opt) => (
                 <button
                   key={opt}
@@ -75,7 +76,7 @@ const SalesOverviewCard = () => {
                     setRange(opt);
                     setOpen(false);
                   }}
-                  className={`w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-slate-50 ${
+                  className={`w-full text-left px-2 py-0.5 text-[9px] font-medium hover:bg-slate-50 ${
                     opt === range ? "text-[#CD051F] font-bold" : "text-slate-700"
                   }`}
                 >
@@ -88,12 +89,12 @@ const SalesOverviewCard = () => {
       </div>
 
       {loading ? (
-        <div className="h-[220px] flex items-center justify-center text-xs text-slate-400">
+        <div className="h-[90px] flex items-center justify-center text-[9px] text-slate-400">
           Loading chart...
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={salesData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+        <ResponsiveContainer width="100%" height={90}>
+          <AreaChart data={salesData} margin={{ top: 2, right: 2, left: -25, bottom: 0 }}>
             <defs>
               <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#CD051F" stopOpacity={0.4} />
@@ -102,25 +103,28 @@ const SalesOverviewCard = () => {
             </defs>
             <XAxis
               dataKey="day"
-              tick={{ fontSize: 12, fill: "#64748B" }}
+              tick={{ fontSize: 9, fill: "#64748B" }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
               tickFormatter={(v) => `${v / 1000}K`}
-              tick={{ fontSize: 12, fill: "#64748B" }}
+              tick={{ fontSize: 9, fill: "#64748B" }}
               axisLine={false}
               tickLine={false}
             />
-            <Tooltip formatter={(v) => [`Rs ${Number(v).toLocaleString()}`, "Sales"]} />
+            <Tooltip
+              formatter={(v) => [`Rs ${Number(v).toLocaleString()}`, "Sales"]}
+              contentStyle={{ fontSize: "9px", padding: "2px 6px" }}
+            />
             <Area
               type="monotone"
               dataKey="sales"
               stroke="#CD051F"
-              strokeWidth={3}
+              strokeWidth={1.5}
               fill="url(#salesGradient)"
-              dot={{ r: 4, fill: "#CD051F", strokeWidth: 0 }}
-              activeDot={{ r: 6 }}
+              dot={{ r: 2, fill: "#CD051F", strokeWidth: 0 }}
+              activeDot={{ r: 4 }}
             />
           </AreaChart>
         </ResponsiveContainer>
