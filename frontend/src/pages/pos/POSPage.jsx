@@ -142,19 +142,29 @@ const POSPage = () => {
   }, [categories, selectedPageId]);
 
   const filteredProducts = useMemo(() => {
+    // 1. Get an array of valid category IDs for the currently selected page
+    const validCategoryIds = filteredCategories.map((cat) => String(cat.id));
+
     return products.filter((p) => {
       const isActive = p.status ? p.status.toLowerCase() !== "inactive" : true;
 
       let matchesCategory = true;
+
       if (selectedCategoryId) {
+        // If a specific category is clicked, match that exact category ID
         matchesCategory = String(p.category_id) === String(selectedCategoryId);
+      } else {
+        // "All Categories" selected: restrict to products matching categories on the active page
+        matchesCategory = validCategoryIds.includes(String(p.category_id));
       }
 
-      const matchesSearch = p.name ? p.name.toLowerCase().includes(searchTerm.toLowerCase()) : true;
+      const matchesSearch = p.name
+        ? p.name.toLowerCase().includes(searchTerm.toLowerCase())
+        : true;
 
       return isActive && matchesCategory && matchesSearch;
     });
-  }, [products, selectedCategoryId, searchTerm]);
+  }, [products, selectedCategoryId, filteredCategories, searchTerm]);
 
   const handleAddToCart = (product) => {
     updateActiveCart((cart) => {

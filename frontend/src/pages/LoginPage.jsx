@@ -1,11 +1,26 @@
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import AuthLayout from "../components/common/AuthLayout";
 import LoginForm from "../components/auth/LoginForm";
 import logo from "../assets/logo.png";
 
 const LoginPage = () => {
+  const navigate = useNavigate();
+
   return (
     <AuthLayout showCar={false} showLogo={false}>
-      {/* Changed items-center to items-start below */}
+      {/* Top Left Navigation Button */}
+      <div className="absolute top-6 left-6 z-30">
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-black/60 text-white font-semibold text-sm rounded-lg backdrop-blur-md border border-white/20 shadow-md transition cursor-pointer"
+        >
+          <ArrowLeft size={18} />
+          <span>Back to POS</span>
+        </button>
+      </div>
+
       <div className="w-full h-full max-w-[1300px] mx-auto px-6 lg:px-12 flex items-start justify-between relative z-20 pt-20">
 
         {/* Left Side: Scaled Logo & Brand Graphic */}

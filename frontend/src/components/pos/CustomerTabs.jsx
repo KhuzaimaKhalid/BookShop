@@ -1,3 +1,5 @@
+// --- CustomerTabs Component ---
+import React from "react";
 import { Plus, ArrowLeft, ArrowRight } from "lucide-react";
 
 const VISIBLE_COUNT = 3;
@@ -36,6 +38,7 @@ const CustomerTabs = ({
       })}
 
       <button
+        type="button"
         onClick={onAddCustomer}
         className="flex items-center gap-2 bg-[#151B26] hover:bg-[#20293b] text-white text-sm font-bold px-5 py-2.5 rounded-lg transition"
       >
@@ -51,7 +54,7 @@ const CustomerTabs = ({
         className={`w-10 h-10 flex items-center justify-center rounded-lg text-white transition ${
           canScrollPrev
             ? "bg-[#CD051F] hover:bg-red-700 cursor-pointer"
-            : "bg-[#151B26] cursor-not-allowed"
+            : "bg-[#151B26] cursor-not-allowed opacity-60"
         }`}
       >
         <ArrowLeft size={16} />
@@ -65,7 +68,7 @@ const CustomerTabs = ({
         className={`w-10 h-10 flex items-center justify-center rounded-lg text-white transition ${
           canScrollNext
             ? "bg-[#CD051F] hover:bg-red-700 cursor-pointer"
-            : "bg-[#151B26] cursor-not-allowed"
+            : "bg-[#151B26] cursor-not-allowed opacity-60"
         }`}
       >
         <ArrowRight size={16} />

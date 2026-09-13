@@ -35,6 +35,8 @@ function createLocalServer() {
   mount("/api/business", "/api/business", "./backend/routes/businessRoutes");
   mount("/api/users", "/api/user", "./backend/routes/userRoutes");
   mount("/api/courses", "/api/course", "./backend/routes/courseRoutes");
+  mount("/api/courses", "/api/course", "./backend/routes/courseRoutes");
+  mount("/api/packages", "/api/package", "./backend/routes/packageRoutes"); // add this
 
   app.use((req, res) => {
     console.warn(`[Local Server 404] No local route matched: ${req.method} ${req.originalUrl}`);

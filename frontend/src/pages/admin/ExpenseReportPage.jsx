@@ -1,351 +1,375 @@
-import { useEffect, useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { ChevronDown } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import api from "../../services/api";
 import AdminLayout from "../../components/layout/AdminLayout";
 
-const CHART_COLORS = [
-  "#1A0066", // Electricity (Dark Navy)
-  "#F24E1E", // Snacks (Bright Orange-Red)
-  "#00A651", // Internet (Green)
-  "#CD051F", // Others (Red)
-  "#164E4D", // Tea (Dark Teal)
-  "#FFBB28", // Transport (Yellow)
-  "#FF8042", // Salary (Orange)
+const PAGE_SIZE = 8;
+
+const DYNAMIC_COLORS = [
+  "#CD051F",
+  "#00A651",
+  "#FF8042",
+  "#FFBB28",
+  "#1A0066",
+  "#164E4D",
   "#D946EF",
   "#0284C7",
+  "#6B7280",
 ];
 
-const PERIOD_OPTIONS = ["Today", "This Week", "This Month", "Custom"];
+const PERIOD_OPTIONS = ["This Week", "Today", "This Month", "This Year", "Custom"];
 
-const toDateStr = (date) => date.toISOString().split("T")[0];
-
-const getRangeForPeriod = (period, customFrom, customTo) => {
-  const today = new Date();
-  const todayStr = toDateStr(today);
-
-  if (period === "Today") {
-    return { from: todayStr, to: todayStr };
-  }
-
-  if (period === "This Week") {
-    const startOfWeek = new Date(today);
-    const day = startOfWeek.getDay();
-    const diffToMonday = day === 0 ? 6 : day - 1;
-    startOfWeek.setDate(startOfWeek.getDate() - diffToMonday);
-    return { from: toDateStr(startOfWeek), to: todayStr };
-  }
-
-  if (period === "This Month") {
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    return { from: toDateStr(startOfMonth), to: todayStr };
-  }
-
-  return { from: customFrom || todayStr, to: customTo || todayStr };
-};
-
-const formatTableDate = (dateStr) => {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-GB", {
+const formatDate = (isoStr) => {
+  if (!isoStr) return "-";
+  const d = new Date(isoStr);
+  const datePart = d.toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
+  });
+  const timePart = d.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
   });
+  return `${datePart}  ${timePart}`;
 };
 
 const ExpenseReportPage = () => {
-  const [period, setPeriod] = useState("This Week");
-  const [periodOpen, setPeriodOpen] = useState(false);
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
-
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
-
-  const range = useMemo(
-    () => getRangeForPeriod(period, customFrom, customTo),
-    [period, customFrom, customTo]
-  );
+  // Filters State
+  const [timeFilter, setTimeFilter] = useState("This Week");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    const fetchExpenses = async () => {
+    const fetchExpenseReport = async () => {
       try {
         setLoading(true);
-        const res = await api.get("/expenses", { params: range });
-        const fetched = res.data?.expenses || (Array.isArray(res.data) ? res.data : []);
-        setExpenses(fetched);
-      } catch (error) {
-        console.error("Error fetching expense report:", error);
+        const res = await api.get("/expenses");
+        const data = res.data?.expenses || (Array.isArray(res.data) ? res.data : []);
+        setExpenses(data);
+      } catch (err) {
+        console.error("Error fetching expense records:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    if (period === "Custom" && (!customFrom || !customTo)) {
-      setLoading(false);
-      return;
-    }
+    fetchExpenseReport();
+  }, []);
 
-    fetchExpenses();
-  }, [range, period, customFrom, customTo]);
+  // Filter Logic
+  const filteredExpenses = useMemo(() => {
+    const now = new Date();
 
-  // Aggregate Category Totals for Chart & Summary
-  const categoryTotals = useMemo(() => {
+    return expenses.filter((exp) => {
+      if (!exp.created_at) return false;
+      const expDate = new Date(exp.created_at);
+
+      if (timeFilter === "Custom") {
+        const dateStr = exp.created_at.split("T")[0];
+        const matchesFrom = !fromDate || dateStr >= fromDate;
+        const matchesTo = !toDate || dateStr <= toDate;
+        return matchesFrom && matchesTo;
+      }
+
+      if (timeFilter === "Today") {
+        return expDate.toDateString() === now.toDateString();
+      }
+
+      if (timeFilter === "This Week") {
+        const startOfWeek = new Date(now);
+        const day = now.getDay() || 7;
+        startOfWeek.setDate(now.getDate() - day + 1);
+        startOfWeek.setHours(0, 0, 0, 0);
+        return expDate >= startOfWeek;
+      }
+
+      if (timeFilter === "This Month") {
+        return (
+          expDate.getMonth() === now.getMonth() &&
+          expDate.getFullYear() === now.getFullYear()
+        );
+      }
+
+      if (timeFilter === "This Year") {
+        return expDate.getFullYear() === now.getFullYear();
+      }
+
+      return true;
+    });
+  }, [expenses, timeFilter, fromDate, toDate]);
+
+  // Pagination Logic
+  const totalPages = Math.max(1, Math.ceil(filteredExpenses.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const startIdx = (currentPage - 1) * PAGE_SIZE;
+  const paginatedExpenses = filteredExpenses.slice(startIdx, startIdx + PAGE_SIZE);
+
+  // Total Calculation
+  const totalAmount = useMemo(() => {
+    return filteredExpenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  }, [filteredExpenses]);
+
+  // Dynamic Expense Grouping (Groups non-other expenses by name, aggregates all is_other expenses into "Other")
+  const { summaryList, chartData } = useMemo(() => {
     const map = {};
-    expenses.forEach((exp) => {
-      const categoryName = exp.is_other ? "Others" : exp.name || "Uncategorized";
-      const amt = Number(exp.amount) || 0;
-      map[categoryName] = (map[categoryName] || 0) + amt;
+    let otherTotal = 0;
+
+    filteredExpenses.forEach((exp) => {
+      const isOther =
+        exp.is_other === 1 ||
+        exp.is_other === true ||
+        exp.is_other === "1" ||
+        exp.is_other === "true";
+
+      const amount = Number(exp.amount) || 0;
+
+      if (isOther) {
+        otherTotal += amount;
+      } else {
+        const name = (exp.name || exp.category || "Uncategorized").trim();
+        map[name] = (map[name] || 0) + amount;
+      }
     });
 
-    return Object.keys(map).map((name) => ({
+    const list = Object.entries(map).map(([name, amount], index) => ({
       name,
-      amount: map[name],
-    }));
-  }, [expenses]);
-
-  const totalExpenseAmount = useMemo(() => {
-    return expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  }, [expenses]);
-
-  const chartData = categoryTotals
-    .filter((item) => item.amount > 0)
-    .map((item) => ({
-      name: item.name,
-      value: item.amount,
+      amount,
+      color: DYNAMIC_COLORS[index % DYNAMIC_COLORS.length],
     }));
 
-  // Pagination Calculations
-  const totalItems = expenses.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentExpenses = expenses.slice(startIndex, startIndex + itemsPerPage);
+    if (otherTotal > 0 || list.length === 0) {
+      list.push({
+        name: "Other",
+        amount: otherTotal,
+        color: DYNAMIC_COLORS[list.length % DYNAMIC_COLORS.length],
+      });
+    }
+
+    const chart = list
+      .filter((item) => item.amount > 0)
+      .map((item) => ({
+        name: item.name,
+        value: item.amount,
+        color: item.color,
+      }));
+
+    return { summaryList: list, chartData: chart };
+  }, [filteredExpenses]);
 
   return (
     <AdminLayout>
-      {/* Top Header & Filter Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-          Expenses
-        </h1>
+      <div className="p-6">
+        {/* Top Bar: Title + Controls in exact 1 Row */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+            Expenses
+          </h1>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Period Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setPeriodOpen((p) => !p)}
-              className="flex items-center gap-2 border border-slate-300 rounded-lg px-5 py-2 text-sm font-medium text-slate-800 bg-white hover:bg-slate-50 transition min-w-[150px] justify-between shadow-sm"
-            >
-              {period}
-              <ChevronDown
-                size={16}
-                className={periodOpen ? "rotate-180 transition" : "transition"}
+          <div className="flex items-center gap-4">
+            {/* Period Select Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setIsDropdownOpen((prev) => !prev)}
+                className="bg-white border border-slate-300 rounded-lg px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm flex items-center justify-between min-w-[160px] hover:bg-slate-50 transition"
+              >
+                <span>{timeFilter}</span>
+                <ChevronDown size={16} className={isDropdownOpen ? "rotate-180 transition" : "transition"} />
+              </button>
+
+              {isDropdownOpen && (
+                <div className="absolute right-0 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg z-20 py-1">
+                  {PERIOD_OPTIONS.map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => {
+                        setTimeFilter(opt);
+                        setIsDropdownOpen(false);
+                        setPage(1);
+                      }}
+                      className={`w-full text-left px-4 py-2 text-xs font-semibold transition hover:bg-slate-50 ${
+                        opt === timeFilter ? "text-[#CD051F]" : "text-slate-700"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Custom Date Filters Container */}
+            <div className="flex items-center gap-2 bg-[#E2E8F0]/60 border border-slate-300 rounded-lg p-1.5 shadow-sm text-xs font-bold text-slate-700">
+              <span className="px-2 font-semibold">Custom</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  setTimeFilter("Custom");
+                  setPage(1);
+                }}
+                className="bg-slate-100/80 border border-slate-300 rounded px-2 py-1 focus:outline-none text-slate-600 font-medium"
               />
-            </button>
-            {periodOpen && (
-              <div className="absolute right-0 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg z-20 py-1">
-                {PERIOD_OPTIONS.map((opt) => (
-                  <button
-                    key={opt}
-                    onClick={() => {
-                      setPeriod(opt);
-                      setPeriodOpen(false);
-                      setCurrentPage(1);
-                    }}
-                    className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-slate-50 ${
-                      opt === period ? "text-[#CD051F] font-bold" : "text-slate-700"
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Custom Date Inputs */}
-          <div className="flex items-center gap-2 border border-slate-300 rounded-lg px-4 py-1.5 bg-white shadow-sm text-sm">
-            <span className="font-medium text-slate-700">Custom</span>
-            <input
-              type="date"
-              value={customFrom}
-              onChange={(e) => {
-                setCustomFrom(e.target.value);
-                setPeriod("Custom");
-                setCurrentPage(1);
-              }}
-              className="text-slate-600 focus:outline-none bg-transparent"
-            />
-            <input
-              type="date"
-              value={customTo}
-              onChange={(e) => {
-                setCustomTo(e.target.value);
-                setPeriod("Custom");
-                setCurrentPage(1);
-              }}
-              className="text-slate-600 focus:outline-none bg-transparent"
-            />
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  setTimeFilter("Custom");
+                  setPage(1);
+                }}
+                className="bg-slate-100/80 border border-slate-300 rounded px-2 py-1 focus:outline-none text-slate-600 font-medium"
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Main Grid Section */}
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* Left Column: Expense Table */}
-        <div className="flex-1 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm w-full">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-xs font-bold text-slate-800 bg-slate-50/50">
-                  <th className="py-4 px-6">Expense</th>
-                  <th className="py-4 px-6">Date</th>
-                  <th className="py-4 px-6">Total Amount (PKR)</th>
-                  <th className="py-4 px-6">Notes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm font-medium text-slate-700">
-                {loading ? (
-                  <tr>
-                    <td colSpan={4} className="py-12 text-center text-slate-400">
-                      Loading expenses...
-                    </td>
+        {/* Main Grid: Table Left & Summary Right */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Table & Pagination (8 Columns) */}
+          <div className="lg:col-span-8 flex flex-col justify-between min-h-[520px]">
+            <div className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-[#F8FAFC] border-b border-slate-300 text-slate-800">
+                    <th className="text-left font-semibold text-xs px-6 py-3.5">Expense</th>
+                    <th className="text-left font-semibold text-xs px-6 py-3.5">Date</th>
+                    <th className="text-left font-semibold text-xs px-6 py-3.5">Total Amount (PKR)</th>
+                    <th className="text-left font-semibold text-xs px-6 py-3.5">Notes</th>
                   </tr>
-                ) : currentExpenses.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="py-12 text-center text-slate-400">
-                      No expenses found for this period.
-                    </td>
-                  </tr>
-                ) : (
-                  currentExpenses.map((exp) => (
-                    <tr key={exp.id} className="hover:bg-slate-50/60 transition">
-                      <td className="py-4 px-6 font-semibold text-slate-900">
-                        {exp.name}
-                      </td>
-                      <td className="py-4 px-6 text-slate-600">
-                        {formatTableDate(exp.created_at)}
-                      </td>
-                      <td className="py-4 px-6 font-semibold text-slate-900">
-                        {exp.amount}
-                      </td>
-                      <td className="py-4 px-6 text-slate-500">
-                        {exp.description || "-"}
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={4} className="text-center py-12 text-slate-400 font-medium text-xs">
+                        Loading expenses...
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  ) : paginatedExpenses.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="text-center py-12 text-slate-400 font-medium text-xs">
+                        No expense records found.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedExpenses.map((exp) => (
+                      <tr key={exp.id} className="hover:bg-slate-50 transition">
+                        <td className="px-6 py-3.5 font-semibold text-slate-800 capitalize">
+                          {exp.is_other ? "Other" : exp.name}
+                        </td>
+                        <td className="px-6 py-3.5 text-slate-700 font-medium text-xs whitespace-nowrap">
+                          {formatDate(exp.created_at)}
+                        </td>
+                        <td className="px-6 py-3.5 font-bold text-slate-900">
+                          {Number(exp.amount || 0).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-3.5 text-slate-600 text-xs font-normal">
+                          {exp.notes || exp.description || ""}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-        {/* Right Column: Donut Chart & Category Breakdown */}
-        <div className="w-full lg:w-80 xl:w-96 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col shrink-0">
-          <div className="border border-slate-200 rounded-xl p-4 text-center mb-6">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-              TOTAL Expenses
-            </p>
-            <p className="text-2xl font-black text-slate-900">
-              Rs {totalExpenseAmount.toLocaleString()}
-            </p>
-          </div>
+            {/* Pagination Footer */}
+            <div className="flex items-center justify-between mt-6">
+              <p className="text-xs font-semibold text-slate-700">
+                {filteredExpenses.length === 0
+                  ? "Showing 0 Expenses"
+                  : `Showing ${startIdx + 1} to ${Math.min(startIdx + PAGE_SIZE, filteredExpenses.length)} of ${filteredExpenses.length} Expenses`}
+              </p>
 
-          <div className="relative w-full h-56 flex items-center justify-center mb-6">
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={chartData}
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {chartData.map((_, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={CHART_COLORS[index % CHART_COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="w-40 h-40 rounded-full border-8 border-slate-100" />
-            )}
-          </div>
-
-          <div className="space-y-3">
-            {categoryTotals.map((item, idx) => (
-              <div
-                key={item.name + idx}
-                className="flex items-center justify-between text-sm font-bold"
-              >
-                <span
-                  style={{ color: CHART_COLORS[idx % CHART_COLORS.length] }}
-                  className="truncate pr-2"
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3.5 py-1.5 border border-slate-300 rounded-md text-xs font-bold text-slate-800 bg-white hover:bg-slate-50 disabled:opacity-40 transition"
                 >
-                  {item.name}
-                </span>
-                <span style={{ color: CHART_COLORS[idx % CHART_COLORS.length] }}>
-                  Rs. {item.amount}
-                </span>
+                  Previous
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
+                  <button
+                    key={num}
+                    onClick={() => setPage(num)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition ${
+                      currentPage === num
+                        ? "bg-[#CD051F] text-white shadow-xs"
+                        : "border border-slate-300 text-slate-800 bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3.5 py-1.5 border border-slate-300 rounded-md text-xs font-bold text-slate-800 bg-white hover:bg-slate-50 disabled:opacity-40 transition"
+                >
+                  Next
+                </button>
               </div>
-            ))}
+            </div>
+          </div>
+
+          {/* Right Column: Total Card & Donut Chart (4 Columns) */}
+          <div className="lg:col-span-4 flex flex-col gap-6">
+            {/* Total Expenses Card */}
+            <div className="bg-white border border-slate-300 rounded-xl p-5 shadow-xs text-center">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">TOTAL EXPENSES</p>
+              <p className="text-3xl font-extrabold text-slate-900 mt-1">
+                Rs {totalAmount.toLocaleString()}
+              </p>
+            </div>
+
+            {/* Pie Chart & Categorized Legend */}
+            <div className="bg-white border border-slate-300 rounded-xl p-6 shadow-xs flex flex-col items-center">
+              <div className="w-full h-64 flex items-center justify-center">
+                {chartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={chartData}
+                        innerRadius={65}
+                        outerRadius={100}
+                        paddingAngle={1}
+                        dataKey="value"
+                      >
+                        {chartData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="w-48 h-48 rounded-full border-[10px] border-slate-100" />
+                )}
+              </div>
+
+              {/* Dynamic Expense Category Color Legend */}
+              <div className="w-full mt-4 space-y-2">
+                {summaryList.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between text-sm font-bold">
+                    <span style={{ color: item.color }}>{item.name}</span>
+                    <span style={{ color: item.color }}>Rs. {item.amount.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Pagination Bar */}
-      {!loading && totalItems > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-4 mt-6">
-          <p className="text-sm font-medium text-slate-800">
-            Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, totalItems)} of{" "}
-            {totalItems} Expenses
-          </p>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-              disabled={currentPage === 1}
-              className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 transition"
-            >
-              Previous
-            </button>
-
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-              <button
-                key={pageNum}
-                onClick={() => setCurrentPage(pageNum)}
-                className={`w-9 h-9 rounded-lg text-sm font-bold transition ${
-                  currentPage === pageNum
-                    ? "bg-[#CD051F] text-white"
-                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                {pageNum}
-              </button>
-            ))}
-
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 transition"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
     </AdminLayout>
   );
 };

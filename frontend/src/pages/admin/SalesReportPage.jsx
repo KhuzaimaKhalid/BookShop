@@ -37,7 +37,6 @@ const getRangeForPeriod = (period, customFrom, customTo) => {
     return { from: toDateStr(startOfMonth), to: todayStr };
   }
 
-  // Custom
   return { from: customFrom || todayStr, to: customTo || todayStr };
 };
 
@@ -79,7 +78,6 @@ const SalesReportPage = () => {
       }
     };
 
-    // For "Custom", wait until both dates are picked before fetching
     if (period === "Custom" && (!customFrom || !customTo)) {
       setLoading(false);
       return;
@@ -93,7 +91,27 @@ const SalesReportPage = () => {
     sales: item.total || 0,
   }));
 
-  const recentSales = report?.recent_sales || [];
+  // Strict local date comparison (PST / local system time)
+  const isSameLocalDate = (dateStr1, dateStr2) => {
+    const d1 = new Date(dateStr1);
+    const d2 = new Date(dateStr2);
+    return (
+      d1.getFullYear() === d2.getFullYear() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getDate() === d2.getDate()
+    );
+  };
+
+  // Strictly filter Recent Sales for TODAY'S DATE ONLY
+  const recentSales = useMemo(() => {
+    const rawSales = report?.recent_sales || [];
+    const today = new Date();
+
+    return rawSales.filter((sale) => {
+      if (!sale.created_at) return false;
+      return isSameLocalDate(sale.created_at, today);
+    });
+  }, [report]);
 
   return (
     <AdminLayout>
@@ -106,7 +124,6 @@ const SalesReportPage = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Period Dropdown */}
           <div className="relative">
             <button
               onClick={() => setPeriodOpen((p) => !p)}
@@ -135,7 +152,6 @@ const SalesReportPage = () => {
             )}
           </div>
 
-          {/* Custom Date Range (only enabled meaningfully when period === "Custom") */}
           <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-4 py-2.5 bg-white">
             <span className="text-sm font-semibold text-slate-600">Custom</span>
             <input
@@ -257,7 +273,7 @@ const SalesReportPage = () => {
             {loading ? (
               <p className="text-sm text-slate-400 text-center py-8">Loading...</p>
             ) : recentSales.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-8">No sales found.</p>
+              <p className="text-sm text-slate-400 text-center py-8">No sales made today.</p>
             ) : (
               recentSales.map((sale, idx) => (
                 <div

@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const RANGE_OPTIONS = ["Daily Sales", "Monthly Sales"];
+const RANGE_OPTIONS = ["Daily Sales", "Weekly Sales", "Monthly Sales"];
 
 const SalesOverviewCard = () => {
   const [range, setRange] = useState("Daily Sales");
@@ -18,27 +18,99 @@ const SalesOverviewCard = () => {
   const [salesData, setSalesData] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Helper to format date keys for display
+  const formatXAxisLabel = (dateStr, selectedRange) => {
+    const dateObj = new Date(dateStr);
+    if (isNaN(dateObj.getTime())) return dateStr;
+
+    if (selectedRange === "Daily Sales") {
+      return dateObj.toLocaleTimeString([], { hour: "numeric", hour12: true });
+    }
+    if (selectedRange === "Weekly Sales") {
+      return dateObj.toLocaleDateString("en-US", { weekday: "short" });
+    }
+    return dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
   useEffect(() => {
     const fetchSalesData = async () => {
       try {
         setLoading(true);
 
-        const endpoint =
-          range === "Daily Sales"
-            ? "/report/daily-sales"
-            : "/report/monthly-sales";
+        const now = new Date();
+        let fromDate = new Date();
 
-        const response = await api.get(endpoint);
-        const data = Array.isArray(response.data) ? response.data : [];
+        if (range === "Daily Sales") {
+          fromDate.setHours(0, 0, 0, 0);
+        } else if (range === "Weekly Sales") {
+          fromDate.setDate(now.getDate() - 6);
+          fromDate.setHours(0, 0, 0, 0);
+        } else if (range === "Monthly Sales") {
+          fromDate.setDate(now.getDate() - 29);
+          fromDate.setHours(0, 0, 0, 0);
+        }
 
-        const formattedData = data.map((item) => ({
-          day: item.date || item.month || "N/A",
-          sales: item.total_sales || 0,
-        }));
+        const from = fromDate.toISOString().split("T")[0];
+        const to = now.toISOString().split("T")[0];
 
-        setSalesData(formattedData);
+        // Fetch sales using existing date-range backend endpoint
+        const response = await api.get(`/sales/date-range?from=${from}&to=${to}`);
+        const rawSales = Array.isArray(response.data) ? response.data : [];
+
+        if (range === "Weekly Sales") {
+          // Build a dictionary of the last 7 days
+          const daysMap = {};
+          for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(now.getDate() - i);
+            const key = d.toISOString().split("T")[0];
+            const label = d.toLocaleDateString("en-US", { weekday: "short" });
+            daysMap[key] = { label, sales: 0 };
+          }
+
+          rawSales.forEach((sale) => {
+            const saleDate = sale.created_at ? sale.created_at.split("T")[0] : null;
+            if (saleDate && daysMap[saleDate]) {
+              daysMap[saleDate].sales += Number(sale.total || sale.subtotal || 0);
+            }
+          });
+
+          setSalesData(Object.values(daysMap));
+        } else if (range === "Monthly Sales") {
+          // Group sales by day across the 30-day window
+          const daysMap = {};
+          for (let i = 29; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(now.getDate() - i);
+            const key = d.toISOString().split("T")[0];
+            const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            daysMap[key] = { label, sales: 0 };
+          }
+
+          rawSales.forEach((sale) => {
+            const saleDate = sale.created_at ? sale.created_at.split("T")[0] : null;
+            if (saleDate && daysMap[saleDate]) {
+              daysMap[saleDate].sales += Number(sale.total || sale.subtotal || 0);
+            }
+          });
+
+          setSalesData(Object.values(daysMap));
+        } else {
+          // Daily Sales grouped by hour
+          const hoursMap = {};
+          rawSales.forEach((sale) => {
+            const label = formatXAxisLabel(sale.created_at, "Daily Sales");
+            if (!hoursMap[label]) {
+              hoursMap[label] = { label, sales: 0 };
+            }
+            hoursMap[label].sales += Number(sale.total || sale.subtotal || 0);
+          });
+
+          setSalesData(Object.values(hoursMap));
+        }
       } catch (error) {
         console.error("Error fetching sales overview chart:", error);
+        setSalesData([]);
       } finally {
         setLoading(false);
       }
@@ -50,7 +122,6 @@ const SalesOverviewCard = () => {
   return (
     <div className="relative mb-2 bg-white p-2 border border-slate-200 rounded-lg shadow-sm">
       <div className="flex items-center justify-between mb-1">
-        {/* Decreased heading size to text-[9px] */}
         <h3 className="text-[9px] font-bold text-slate-900 leading-none uppercase tracking-wider">
           Sales Overview
         </h3>
@@ -92,9 +163,16 @@ const SalesOverviewCard = () => {
         <div className="h-[90px] flex items-center justify-center text-[9px] text-slate-400">
           Loading chart...
         </div>
+      ) : salesData.length === 0 ? (
+        <div className="h-[90px] flex items-center justify-center text-[9px] text-slate-400">
+          No sales recorded for this period.
+        </div>
       ) : (
         <ResponsiveContainer width="100%" height={90}>
-          <AreaChart data={salesData} margin={{ top: 2, right: 2, left: -25, bottom: 0 }}>
+          <AreaChart
+            data={salesData}
+            margin={{ top: 2, right: 2, left: -25, bottom: 0 }}
+          >
             <defs>
               <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#CD051F" stopOpacity={0.4} />
@@ -102,13 +180,17 @@ const SalesOverviewCard = () => {
               </linearGradient>
             </defs>
             <XAxis
-              dataKey="day"
+              dataKey="label"
               tick={{ fontSize: 9, fill: "#64748B" }}
               axisLine={false}
               tickLine={false}
+              interval={range === "Monthly Sales" ? "preserveStartEnd" : 0}
             />
             <YAxis
-              tickFormatter={(v) => `${v / 1000}K`}
+              domain={[0, "auto"]}
+              tickFormatter={(v) =>
+                v >= 1000 ? `${(v / 1000).toFixed(1)}K` : `${v}`
+              }
               tick={{ fontSize: 9, fill: "#64748B" }}
               axisLine={false}
               tickLine={false}

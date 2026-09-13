@@ -1,11 +1,36 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import api from "../../services/api";
 import AdminLayout from "../../components/layout/AdminLayout";
 
 const COLOR_PALETTE = [
-  "#1A0966", "#F97316", "#E11D48", "#EAB308", "#0EA5E9", "#16A34A", "#9333EA"
+  "#1A0966", "#F97316", "#E11D48", "#EAB308", "#0EA5E9", "#16A34A", "#9333EA", "#D946EF"
 ];
+
+const toDateStr = (date) => date.toISOString().split("T")[0];
+
+const getPresetRanges = () => {
+  const today = new Date();
+  const todayStr = toDateStr(today);
+
+  // Start of Week (Monday)
+  const startOfWeek = new Date(today);
+  const day = startOfWeek.getDay();
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  startOfWeek.setDate(startOfWeek.getDate() - diffToMonday);
+
+  // Start of Month
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  // Start of Year
+  const startOfYear = new Date(today.getFullYear(), 0, 1);
+
+  return {
+    "This Week": { from: toDateStr(startOfWeek), to: todayStr },
+    "This Month": { from: toDateStr(startOfMonth), to: todayStr },
+    "This Year": { from: toDateStr(startOfYear), to: todayStr },
+  };
+};
 
 export default function ReportsPage() {
   const [timeRange, setTimeRange] = useState("This Week");
@@ -14,14 +39,48 @@ export default function ReportsPage() {
 
   const [salesTotal, setSalesTotal] = useState(0);
   const [pageSales, setPageSales] = useState([]);
-  const [expenseTotal, setExpenseTotal] = useState(0);
   const [expensesList, setExpensesList] = useState([]);
   const [profitTotal, setProfitTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // Handle Preset Selection Dropdown Changes
+  const handleRangeChange = (e) => {
+    const selected = e.target.value;
+    setTimeRange(selected);
+
+    if (selected !== "Custom") {
+      const presets = getPresetRanges();
+      if (presets[selected]) {
+        setFromDate(presets[selected].from);
+        setToDate(presets[selected].to);
+      }
+    }
+  };
+
+  const handleFromDateChange = (e) => {
+    setFromDate(e.target.value);
+    setTimeRange("Custom");
+  };
+
+  const handleToDateChange = (e) => {
+    setToDate(e.target.value);
+    setTimeRange("Custom");
+  };
+
+  // Set initial preset dates
   useEffect(() => {
-    fetchReportsData();
-  }, [timeRange, fromDate, toDate]);
+    const presets = getPresetRanges();
+    if (presets["This Week"]) {
+      setFromDate(presets["This Week"].from);
+      setToDate(presets["This Week"].to);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (fromDate || toDate || timeRange !== "Custom") {
+      fetchReportsData();
+    }
+  }, [fromDate, toDate]);
 
   const fetchReportsData = async () => {
     setLoading(true);
@@ -34,15 +93,17 @@ export default function ReportsPage() {
       const [salesRes, pageSalesRes, expenseRes, profitRes] = await Promise.all([
         api.get("/report/sales", { params }),
         api.get("/report/category-sales", { params }),
-        api.get("/expenses"),
+        api.get("/expenses", { params }),
         api.get("/report/profit", { params })
       ]);
 
-      setSalesTotal(salesRes.data.total_sales || 0);
+      setSalesTotal(salesRes.data?.total_sales || 0);
       setPageSales(pageSalesRes.data || []);
-      setExpenseTotal(expenseRes.data.total_expense || 0);
-      setExpensesList(expenseRes.data.expenses || []);
-      setProfitTotal(profitRes.data.total_profit || 0);
+      
+      const rawExpenses = expenseRes.data?.expenses || (Array.isArray(expenseRes.data) ? expenseRes.data : []);
+      setExpensesList(rawExpenses);
+
+      setProfitTotal(profitRes.data?.total_profit || 0);
 
     } catch (error) {
       console.error("Error loading report data:", error);
@@ -50,6 +111,22 @@ export default function ReportsPage() {
       setLoading(false);
     }
   };
+
+  // Client-side Filtered Expenses (handles custom dates accurately)
+  const filteredExpensesList = useMemo(() => {
+    return expensesList.filter((exp) => {
+      if (!exp.created_at) return true;
+      const dateStr = exp.created_at.split("T")[0];
+      const matchesFrom = !fromDate || dateStr >= fromDate;
+      const matchesTo = !toDate || dateStr <= toDate;
+      return matchesFrom && matchesTo;
+    });
+  }, [expensesList, fromDate, toDate]);
+
+  // Compute Total Expense for the filtered range
+  const computedExpenseTotal = useMemo(() => {
+    return filteredExpensesList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  }, [filteredExpensesList]);
 
   // Format Page Sales Amount for Sales Pie Chart
   const formattedSalesData = pageSales.map((item) => ({
@@ -63,11 +140,32 @@ export default function ReportsPage() {
     value: Number(item.total_profit_amount) || 0,
   }));
 
-  // Format Expenses List for Expense Pie Chart
-  const formattedExpenseData = expensesList.map((item) => ({
-    name: item.name,
-    value: Number(item.amount) || 0,
-  }));
+  // Group expenses by category & map is_other / 1 / true to "Others"
+  const formattedExpenseData = useMemo(() => {
+    const grouped = {};
+
+    filteredExpensesList.forEach((item) => {
+      const isOtherFlag =
+        item.is_other === 1 ||
+        item.is_other === true ||
+        item.is_other === "1" ||
+        item.is_other === "true";
+
+      const categoryName = (item.category || item.name || "Others").trim();
+      const isOtherName =
+        categoryName.toLowerCase() === "others" || categoryName.toLowerCase() === "other";
+
+      const key = isOtherFlag || isOtherName ? "Others" : categoryName;
+      const amount = Number(item.amount) || 0;
+
+      grouped[key] = (grouped[key] || 0) + amount;
+    });
+
+    return Object.keys(grouped).map((cat) => ({
+      name: cat,
+      value: grouped[cat],
+    }));
+  }, [filteredExpensesList]);
 
   return (
     <AdminLayout>
@@ -75,31 +173,32 @@ export default function ReportsPage() {
         {/* Header Filters */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Summary</h1>
-          
+
           <div className="flex items-center gap-3">
-            <select 
-              value={timeRange} 
-              onChange={(e) => setTimeRange(e.target.value)}
+            <select
+              value={timeRange}
+              onChange={handleRangeChange}
               className="bg-white border border-gray-300 rounded-md px-4 py-2 text-sm font-medium shadow-sm outline-none"
             >
               <option value="This Week">This Week</option>
               <option value="This Month">This Month</option>
               <option value="This Year">This Year</option>
+              <option value="Custom">Custom</option>
             </select>
 
             <div className="flex items-center gap-2 bg-gray-200 p-1.5 rounded-md border border-gray-300 text-sm">
               <span className="font-medium text-gray-700 px-1">Custom</span>
-              <input 
-                type="date" 
+              <input
+                type="date"
                 value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="bg-white border rounded px-2 py-1 text-xs outline-none" 
+                onChange={handleFromDateChange}
+                className="bg-white border rounded px-2 py-1 text-xs outline-none"
               />
-              <input 
-                type="date" 
+              <input
+                type="date"
                 value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="bg-white border rounded px-2 py-1 text-xs outline-none" 
+                onChange={handleToDateChange}
+                className="bg-white border rounded px-2 py-1 text-xs outline-none"
               />
             </div>
           </div>
@@ -107,7 +206,6 @@ export default function ReportsPage() {
 
         {/* Dynamic Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
           {/* 1. Sales Summary Card */}
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 text-center">
             <h2 className="text-xl font-bold text-gray-900 mb-1">Sales Summary</h2>
@@ -120,7 +218,7 @@ export default function ReportsPage() {
                 <PieChart>
                   <Tooltip formatter={(val) => `Rs. ${val.toLocaleString()}`} />
                   <Pie
-                    data={formattedSalesData.length > 0 ? formattedSalesData : [{ name: 'No Sales', value: 1 }]}
+                    data={formattedSalesData.length > 0 ? formattedSalesData : [{ name: "No Sales", value: 1 }]}
                     innerRadius={55}
                     outerRadius={85}
                     dataKey="value"
@@ -155,7 +253,7 @@ export default function ReportsPage() {
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 text-center">
             <h2 className="text-xl font-bold text-gray-900 mb-1">Expense Summary</h2>
             <p className="text-2xl font-bold text-[#CD051F] mb-4">
-              {loading ? "..." : `Rs. ${expenseTotal.toLocaleString()}`}
+              {loading ? "..." : `Rs. ${computedExpenseTotal.toLocaleString()}`}
             </p>
 
             <div className="h-52 w-full">
@@ -163,7 +261,7 @@ export default function ReportsPage() {
                 <PieChart>
                   <Tooltip formatter={(val) => `Rs. ${val.toLocaleString()}`} />
                   <Pie
-                    data={formattedExpenseData.length > 0 ? formattedExpenseData : [{ name: 'No Expenses', value: 1 }]}
+                    data={formattedExpenseData.length > 0 ? formattedExpenseData : [{ name: "No Expenses", value: 1 }]}
                     innerRadius={55}
                     outerRadius={85}
                     dataKey="value"
@@ -181,11 +279,11 @@ export default function ReportsPage() {
             </div>
 
             <div className="mt-4 space-y-1 text-left text-sm font-semibold max-h-36 overflow-y-auto pr-1">
-              {expensesList.length > 0 ? (
-                expensesList.map((exp, idx) => (
-                  <div key={exp.id || idx} className="flex justify-between" style={{ color: COLOR_PALETTE[idx % COLOR_PALETTE.length] }}>
-                    <span>{exp.name}</span>
-                    <span>Rs. {Number(exp.amount).toLocaleString()}</span>
+              {formattedExpenseData.length > 0 ? (
+                formattedExpenseData.map((exp, idx) => (
+                  <div key={exp.name + idx} className="flex justify-between" style={{ color: COLOR_PALETTE[idx % COLOR_PALETTE.length] }}>
+                    <span className="capitalize">{exp.name}</span>
+                    <span>Rs. {Number(exp.value).toLocaleString()}</span>
                   </div>
                 ))
               ) : (
@@ -206,7 +304,7 @@ export default function ReportsPage() {
                 <PieChart>
                   <Tooltip formatter={(val) => `Rs. ${val.toLocaleString()}`} />
                   <Pie
-                    data={formattedProfitData.length > 0 ? formattedProfitData : [{ name: 'No Data', value: 1 }]}
+                    data={formattedProfitData.length > 0 ? formattedProfitData : [{ name: "No Data", value: 1 }]}
                     innerRadius={55}
                     outerRadius={85}
                     dataKey="value"
@@ -236,7 +334,6 @@ export default function ReportsPage() {
               )}
             </div>
           </div>
-
         </div>
       </div>
     </AdminLayout>

@@ -174,10 +174,6 @@ const InvoiceModal = ({ saleId, onClose }) => {
                     <span>PAID:</span>
                     <span>Rs. {Number(sale.paid_amount).toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>CHANGE:</span>
-                    <span>Rs. {Number(sale.change).toLocaleString()}</span>
-                  </div>
                 </div>
 
                 {/* Footer */}

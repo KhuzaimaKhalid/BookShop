@@ -24,7 +24,7 @@ const CoursePage = () => {
 
   const [invoiceSaleId, setInvoiceSaleId] = useState(null);
 
-  // Page state (for filtering categories by page, same as POSPage)
+  // Page state
   const [pages, setPages] = useState([]);
   const [selectedPageId, setSelectedPageId] = useState(null);
 
@@ -50,10 +50,16 @@ const CoursePage = () => {
   // Modal state (Course/Stationery bundle editor)
   const [editingItem, setEditingItem] = useState(null);
   const [bundleProducts, setBundleProducts] = useState([]);
+  const [initialProductsMap, setInitialProductsMap] = useState({});
   const [bookSearch, setBookSearch] = useState("");
   const [isNewBundle, setIsNewBundle] = useState(false);
   const [bundleNameInput, setBundleNameInput] = useState("");
   const [isStationeryType, setIsStationeryType] = useState(false);
+  const [isSavingModal, setIsSavingModal] = useState(false);
+
+  // Confirmation state for ADD TO BILL
+  const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+  const [pendingCardItem, setPendingCardItem] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -140,46 +146,51 @@ const CoursePage = () => {
     return 0;
   };
 
-  const handleAddToCart = async (item, isStationery = false) => {
+  const handleAddToCart = (item, isStationery = false) => {
+    setIsStationeryType(isStationery);
+    setPendingCardItem(item);
+    setShowConfirmPopup(true);
+  };
+
+  const executeAddToCart = async (item, isStationery) => {
     const itemId = isStationery
       ? item.stationary_id || item.id
       : item.course_id || item.id;
-  
+
     try {
       const endpoint = isStationery
         ? `/stationary/products/${itemId}`
         : `/courses/${itemId}/products`;
-  
+
       const res = await api.get(endpoint);
       const bundleItems = res.data?.products || [];
-  
+
       if (bundleItems.length === 0) {
         alert(
           `This ${isStationery ? "stationery package" : "course"} has no products added yet.`
         );
         return;
       }
-  
+
       updateActiveCart((cart) => {
         let updatedItems = [...cart.items];
-  
+
         bundleItems.forEach((p) => {
-          // Fallback through possible ID field names
           const rawId = p.product_id ?? p.id ?? p._id;
-          const productId = typeof rawId === 'string' 
-            ? Number(rawId.replace(/\D/g, '')) 
+          const productId = typeof rawId === 'string'
+            ? Number(rawId.replace(/\D/g, ''))
             : Number(rawId);
-  
+
           if (!productId || isNaN(productId)) return;
-  
+
           const bundleQty = isStationery
             ? p.stationary_quantity || 1
             : p.course_quantity || 1;
-  
+
           const existingIndex = updatedItems.findIndex(
             (i) => Number(i.product_id) === productId
           );
-  
+
           if (existingIndex >= 0) {
             updatedItems[existingIndex] = {
               ...updatedItems[existingIndex],
@@ -195,7 +206,7 @@ const CoursePage = () => {
             });
           }
         });
-  
+
         return { ...cart, items: updatedItems };
       });
     } catch (err) {
@@ -207,17 +218,14 @@ const CoursePage = () => {
   const handleSaveBill = async () => {
     if (activeCart.items.length === 0) return null;
 
-    // Calculate total bill amount
     const calculatedTotal = activeCart.items.reduce(
       (sum, item) => sum + (Number(item.price) || 0) * (Number(item.qty) || 1),
       0
     );
 
-    // If paidAmount is 0 or not entered, default to total bill amount
     const rawPaid = Number(activeCart.paidAmount);
     const paid = rawPaid > 0 ? rawPaid : calculatedTotal;
 
-    // Filter and sanitize items to ensure product_id is valid
     const sanitizedItems = activeCart.items
       .map((i) => {
         const rawId = i.product_id ?? i.id ?? i._id;
@@ -241,7 +249,7 @@ const CoursePage = () => {
         items: sanitizedItems,
         paid_amount: paid,
       });
-      
+
       updateActiveCart((cart) => ({
         ...cart,
         invoiceNo: res.data.invoice_no,
@@ -292,20 +300,32 @@ const CoursePage = () => {
           : `/courses/${targetId}/products`;
         const res = await api.get(endpoint);
         const rawProds = res.data.products || res.data || [];
-        const fetchedProds = rawProds.map((p) => ({
-          ...p,
-          quantity: Number(p.quantity ?? p.course_quantity ?? p.stationary_quantity ?? 1) || 1,
-        }));
+        
+        const map = {};
+        const fetchedProds = rawProds.map((p) => {
+          const pId = p.product_id || p.id;
+          const q = Number(p.quantity ?? p.course_quantity ?? p.stationary_quantity ?? 1) || 1;
+          map[pId] = q;
+          return {
+            ...p,
+            product_id: pId,
+            quantity: q,
+          };
+        });
+
+        setInitialProductsMap(map);
         setBundleProducts(fetchedProds);
       } catch (err) {
         console.error("Error loading bundle products:", err);
         setBundleProducts([]);
+        setInitialProductsMap({});
       }
     } else {
       setIsNewBundle(true);
       setEditingItem({ title: "" });
       setBundleNameInput("");
       setBundleProducts([]);
+      setInitialProductsMap({});
     }
   };
 
@@ -313,7 +333,7 @@ const CoursePage = () => {
     const prodId = product.product_id || product.id;
     if (bundleProducts.some((p) => (p.product_id || p.id) === prodId)) return;
 
-    setBundleProducts((prev) => [...prev, { ...product, quantity: 1 }]);
+    setBundleProducts((prev) => [...prev, { ...product, product_id: prodId, quantity: 1 }]);
   };
 
   const handleRemoveProductFromBundleModal = (productId) => {
@@ -333,7 +353,7 @@ const CoursePage = () => {
           : Infinity;
         const currentQty = Number(p.quantity) || 1;
 
-        if (currentQty >= stock) return p; // can't exceed available stock
+        if (currentQty >= stock) return p;
         return { ...p, quantity: currentQty + 1 };
       })
     );
@@ -346,7 +366,7 @@ const CoursePage = () => {
         if (pid !== productId) return p;
 
         const currentQty = Number(p.quantity) || 1;
-        if (currentQty <= 1) return p; // can't go below 1
+        if (currentQty <= 1) return p;
         return { ...p, quantity: currentQty - 1 };
       })
     );
@@ -359,62 +379,126 @@ const CoursePage = () => {
     );
   }, [bundleProducts]);
 
-  const handleSaveBundleModal = async () => {
+  // Saves changes in the Modal using correct Stationery Endpoints
+  const handleSaveChangesToBackend = async () => {
     if (!bundleNameInput.trim()) {
       alert(`Please enter a ${isStationeryType ? "stationary" : "course"} name`);
       return;
     }
 
     if (bundleProducts.length === 0) {
-      alert("Please add at least one item to the bundle before adding to bill.");
+      alert("Please add at least one item to the bundle.");
       return;
     }
 
+    setIsSavingModal(true);
     try {
-      updateActiveCart((cart) => {
-        let updatedItems = [...cart.items];
+      if (isStationeryType) {
+        let stationaryId = editingItem?.stationary_id || editingItem?.id;
 
+        // 1. Create stationary package if new
+        if (isNewBundle || !stationaryId) {
+          const createRes = await api.post("/stationary/create", {
+            title: bundleNameInput,
+          });
+          stationaryId =
+            createRes.data?.stationary?.stationary_id ||
+            createRes.data?.stationary_id;
+        }
+
+        if (!stationaryId) {
+          throw new Error("Failed to resolve stationary ID.");
+        }
+
+        const currentMap = {};
         bundleProducts.forEach((p) => {
-          // Extract & clean product_id
-          const rawId = p.product_id ?? p.id ?? p._id;
-          const productId = typeof rawId === 'string' ? Number(rawId.replace(/\D/g, '')) : Number(rawId);
-
-          if (!productId) {
-            console.error("Invalid product ID found in bundle:", p);
-            return;
-          }
-
-          const bundleQty = Number(p.quantity) || 1;
-          const price = Number(p.selling_price || p.price || 0);
-
-          const existingIndex = updatedItems.findIndex(
-            (i) => Number(i.product_id) === productId
-          );
-
-          if (existingIndex >= 0) {
-            updatedItems[existingIndex] = {
-              ...updatedItems[existingIndex],
-              qty: updatedItems[existingIndex].qty + bundleQty,
-            };
-          } else {
-            updatedItems.push({
-              product_id: productId,
-              name: p.name,
-              price: price,
-              qty: bundleQty,
-              maxStock: p.stock_quantity ?? 999,
-            });
-          }
+          const pid = Number(p.product_id || p.id);
+          currentMap[pid] = Number(p.quantity) || 1;
         });
 
-        return { ...cart, items: updatedItems };
-      });
+        // 2. Remove products unselected in modal
+        for (const pid of Object.keys(initialProductsMap)) {
+          const numericPid = Number(pid);
+          if (!currentMap[numericPid]) {
+            await api.post("/stationary/update-product", {
+              stationary_id: Number(stationaryId),
+              product_id: numericPid,
+              action: "remove",
+            });
+          }
+        }
 
+        // 3. Sync active product quantities
+        for (const [pid, newQty] of Object.entries(currentMap)) {
+          await api.post("/stationary/update-product", {
+            stationary_id: Number(stationaryId),
+            product_id: Number(pid),
+            action: "set",
+            quantity: Number(newQty),
+          });
+        }
+      } else {
+        // Course Specific Saving Logic
+        let courseId = editingItem?.course_id || editingItem?.id;
+
+        if (isNewBundle || !courseId) {
+          const createRes = await api.post("/courses", { title: bundleNameInput });
+          courseId = createRes.data?.course?.course_id || createRes.data?.course_id;
+        }
+
+        if (!courseId) {
+          throw new Error("Failed to resolve course ID.");
+        }
+
+        const currentMap = {};
+        bundleProducts.forEach((p) => {
+          const pid = Number(p.product_id || p.id);
+          currentMap[pid] = Number(p.quantity) || 1;
+        });
+
+        for (const pid of Object.keys(initialProductsMap)) {
+          const numericPid = Number(pid);
+          if (!currentMap[numericPid]) {
+            await api.put("/courses/products", {
+              course_id: Number(courseId),
+              product_id: numericPid,
+              action: "remove",
+              quantity: 0,
+            });
+          }
+        }
+
+        for (const [pid, newQty] of Object.entries(currentMap)) {
+          await api.put("/courses/products", {
+            course_id: Number(courseId),
+            product_id: Number(pid),
+            action: "set",
+            quantity: Number(newQty),
+          });
+        }
+      }
+
+      await fetchData();
       setEditingItem(null);
     } catch (err) {
-      console.error("Error adding bundle to bill:", err);
-      alert("Failed to add items to bill.");
+      console.error("Error saving bundle to backend:", err);
+      alert(err.response?.data?.message || "Failed to save changes.");
+    } finally {
+      setIsSavingModal(false);
     }
+  };
+
+  const handleConfirmAddCardItemToBill = async () => {
+    if (pendingCardItem) {
+      await executeAddToCart(pendingCardItem, isStationeryType);
+      setPendingCardItem(null);
+    }
+    setShowConfirmPopup(false);
+  };
+
+  const handleCancelConfirm = () => {
+    setShowConfirmPopup(false);
+    setPendingCardItem(null);
   };
 
   return (
@@ -483,7 +567,7 @@ const CoursePage = () => {
 
                           <button
                             onClick={() => handleOpenEditModal(item, false)}
-                            className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-md hover:bg-slate-800 transition shrink-0 ml-2"
+                            className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-md hover:bg-slate-800 transition shrink-0 ml-2 cursor-pointer"
                             title="Edit Course"
                           >
                             <Edit3 size={14} />
@@ -496,7 +580,7 @@ const CoursePage = () => {
                 <div className="text-right mt-2">
                   <button
                     onClick={() => handleOpenEditModal(null, false)}
-                    className="text-xs font-bold text-[#CD051F] hover:underline"
+                    className="text-xs font-bold text-[#CD051F] hover:underline cursor-pointer"
                   >
                     +Add Class
                   </button>
@@ -533,7 +617,7 @@ const CoursePage = () => {
 
                           <button
                             onClick={() => handleOpenEditModal(item, true)}
-                            className="w-8 h-8 flex items-center justify-center bg-black text-[#CD051F] border border-[#CD051F] rounded-md hover:bg-red-50 transition shrink-0 ml-2"
+                            className="w-8 h-8 flex items-center justify-center bg-black text-[#CD051F] border border-[#CD051F] rounded-md hover:bg-red-50 transition shrink-0 ml-2 cursor-pointer"
                             title="Edit Stationery"
                           >
                             <Edit3 size={14} />
@@ -546,7 +630,7 @@ const CoursePage = () => {
                 <div className="text-right mt-2">
                   <button
                     onClick={() => handleOpenEditModal(null, true)}
-                    className="text-xs font-bold text-[#CD051F] hover:underline"
+                    className="text-xs font-bold text-[#CD051F] hover:underline cursor-pointer"
                   >
                     +Add Class
                   </button>
@@ -573,6 +657,7 @@ const CoursePage = () => {
         </main>
       </div>
 
+      {/* Main Bundle Editor Modal */}
       {editingItem && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col">
@@ -595,7 +680,7 @@ const CoursePage = () => {
               </div>
               <button
                 onClick={() => setEditingItem(null)}
-                className="text-white hover:opacity-75 transition shrink-0"
+                className="text-white hover:opacity-75 transition shrink-0 cursor-pointer"
               >
                 <X size={20} />
               </button>
@@ -634,7 +719,7 @@ const CoursePage = () => {
                                 handleAddProductToBundleModal(product);
                                 setBookSearch("");
                               }}
-                              className="w-full text-left px-3 py-2 text-xs hover:bg-slate-100 flex justify-between items-center border-b border-slate-100 last:border-b-0"
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-slate-100 flex justify-between items-center border-b border-slate-100 last:border-b-0 cursor-pointer"
                             >
                               <span>{product.name}</span>
                               <span className="font-bold text-[#CD051F]">
@@ -679,7 +764,7 @@ const CoursePage = () => {
                           <button
                             onClick={() => handleBundleQtyDecrement(prodId)}
                             disabled={!canDecrement}
-                            className="w-6 h-6 flex items-center justify-center rounded-md border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="w-6 h-6 flex items-center justify-center rounded-md border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                             title={canDecrement ? "Decrease quantity" : "Minimum quantity is 1"}
                           >
                             −
@@ -688,7 +773,7 @@ const CoursePage = () => {
                           <button
                             onClick={() => handleBundleQtyIncrement(prodId)}
                             disabled={!canIncrement}
-                            className="w-6 h-6 flex items-center justify-center rounded-md border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="w-6 h-6 flex items-center justify-center rounded-md border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                             title={canIncrement ? "Increase quantity" : "No more stock available"}
                           >
                             +
@@ -701,7 +786,7 @@ const CoursePage = () => {
                           </span>
                           <button
                             onClick={() => handleRemoveProductFromBundleModal(prodId)}
-                            className="text-[#CD051F] hover:text-red-700 transition"
+                            className="text-[#CD051F] hover:text-red-700 transition cursor-pointer"
                           >
                             <Trash2 size={15} />
                           </button>
@@ -723,15 +808,44 @@ const CoursePage = () => {
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
               <button
                 onClick={() => setEditingItem(null)}
-                className="px-5 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
+                className="px-5 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
-                onClick={handleSaveBundleModal}
-                className="px-5 py-2 bg-[#CD051F] hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                onClick={handleSaveChangesToBackend}
+                disabled={isSavingModal}
+                className="px-5 py-2 bg-[#CD051F] hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
               >
-                ADD TO BILL
+                {isSavingModal ? "SAVING..." : "SAVE CHANGES"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Popup Modal */}
+      {showConfirmPopup && (
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-xl shadow-2xl p-5 border border-slate-200 text-center animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-sm font-extrabold text-slate-900 mb-2">
+              Confirm Action
+            </h3>
+            <p className="text-xs text-slate-600 mb-5">
+              Are you sure to add {isStationeryType ? "stationery" : "course"} to bill?
+            </p>
+            <div className="flex justify-center gap-3">
+              <button
+                onClick={handleCancelConfirm}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmAddCardItemToBill}
+                className="px-4 py-2 bg-[#CD051F] hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                Yes, Add to Bill
               </button>
             </div>
           </div>

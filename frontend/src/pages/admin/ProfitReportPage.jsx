@@ -18,28 +18,22 @@ const PERIOD_OPTIONS = ["Today", "This Week", "This Month", "Custom"];
 
 const toDateStr = (date) => date.toISOString().split("T")[0];
 
-const getRangeForPeriod = (period, customFrom, customTo) => {
+const getPresetRanges = () => {
   const today = new Date();
   const todayStr = toDateStr(today);
 
-  if (period === "Today") {
-    return { from: todayStr, to: todayStr };
-  }
+  const startOfWeek = new Date(today);
+  const day = startOfWeek.getDay();
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  startOfWeek.setDate(startOfWeek.getDate() - diffToMonday);
 
-  if (period === "This Week") {
-    const startOfWeek = new Date(today);
-    const day = startOfWeek.getDay();
-    const diffToMonday = day === 0 ? 6 : day - 1;
-    startOfWeek.setDate(startOfWeek.getDate() - diffToMonday);
-    return { from: toDateStr(startOfWeek), to: todayStr };
-  }
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-  if (period === "This Month") {
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    return { from: toDateStr(startOfMonth), to: todayStr };
-  }
-
-  return { from: customFrom || "", to: customTo || "" };
+  return {
+    "Today": { from: todayStr, to: todayStr },
+    "This Week": { from: toDateStr(startOfWeek), to: todayStr },
+    "This Month": { from: toDateStr(startOfMonth), to: todayStr },
+  };
 };
 
 const formatChartMonth = (monthStr) => {
@@ -58,19 +52,46 @@ const ProfitReportPage = () => {
   const [profitData, setProfitData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const range = useMemo(
-    () => getRangeForPeriod(period, customFrom, customTo),
-    [period, customFrom, customTo]
-  );
+  // Set default dates based on initial "This Month" selection
+  useEffect(() => {
+    const presets = getPresetRanges();
+    if (presets["This Month"]) {
+      setCustomFrom(presets["This Month"].from);
+      setCustomTo(presets["This Month"].to);
+    }
+  }, []);
+
+  const handlePeriodSelect = (opt) => {
+    setPeriod(opt);
+    setPeriodOpen(false);
+
+    if (opt !== "Custom") {
+      const presets = getPresetRanges();
+      if (presets[opt]) {
+        setCustomFrom(presets[opt].from);
+        setCustomTo(presets[opt].to);
+      }
+    }
+  };
+
+  const handleFromDateChange = (e) => {
+    setCustomFrom(e.target.value);
+    setPeriod("Custom");
+  };
+
+  const handleToDateChange = (e) => {
+    setCustomTo(e.target.value);
+    setPeriod("Custom");
+  };
 
   useEffect(() => {
     const fetchProfitReport = async () => {
       try {
         setLoading(true);
         const params = {};
-        if (range.from && range.to) {
-          params.from = range.from;
-          params.to = range.to;
+        if (customFrom && customTo) {
+          params.from = customFrom;
+          params.to = customTo;
         }
         const res = await api.get("/report/profit", { params });
         setProfitData(res.data);
@@ -87,7 +108,7 @@ const ProfitReportPage = () => {
     }
 
     fetchProfitReport();
-  }, [range, period, customFrom, customTo]);
+  }, [period, customFrom, customTo]);
 
   const monthlyBreakdown = profitData?.monthly_breakdown || [];
 
@@ -124,7 +145,7 @@ const ProfitReportPage = () => {
               onClick={() => setPeriodOpen((p) => !p)}
               className="flex items-center gap-2 border border-slate-300 rounded-lg px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition min-w-[130px] justify-between"
             >
-              {period === "Custom" ? "Select" : period}
+              {period}
               <ChevronDown size={14} className={periodOpen ? "rotate-180 transition" : "transition"} />
             </button>
             {periodOpen && (
@@ -132,10 +153,7 @@ const ProfitReportPage = () => {
                 {PERIOD_OPTIONS.map((opt) => (
                   <button
                     key={opt}
-                    onClick={() => {
-                      setPeriod(opt);
-                      setPeriodOpen(false);
-                    }}
+                    onClick={() => handlePeriodSelect(opt)}
                     className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-slate-50 ${
                       opt === period ? "text-[#CD051F] font-bold" : "text-slate-700"
                     }`}
@@ -153,20 +171,14 @@ const ProfitReportPage = () => {
             <input
               type="date"
               value={customFrom}
-              onChange={(e) => {
-                setCustomFrom(e.target.value);
-                setPeriod("Custom");
-              }}
+              onChange={handleFromDateChange}
               className="text-sm text-slate-700 focus:outline-none"
             />
             <span className="text-xs font-semibold text-slate-500 uppercase px-1">TO</span>
             <input
               type="date"
               value={customTo}
-              onChange={(e) => {
-                setCustomTo(e.target.value);
-                setPeriod("Custom");
-              }}
+              onChange={handleToDateChange}
               className="text-sm text-slate-700 focus:outline-none"
             />
           </div>
@@ -209,7 +221,7 @@ const ProfitReportPage = () => {
           <div>
             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">TOTAL PROFIT</p>
             <p className="text-xl font-extrabold text-slate-900">
-              {loading ? "..." : Number(profitData?.total_profit || 0).toLocaleString()}
+              {loading ? "..." : `Rs. ${Number(profitData?.total_profit || 0).toLocaleString()}`}
             </p>
           </div>
         </div>

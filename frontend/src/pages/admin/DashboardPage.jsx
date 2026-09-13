@@ -42,7 +42,7 @@ const DashboardPage = () => {
     };
 
     fetchDashboardSummary();
-}, []);
+  }, []);
 
   return (
     <AdminLayout>
@@ -85,7 +85,7 @@ const DashboardPage = () => {
           label="Low Stock Items"
           value={loading ? "..." : summary.lowStockItems}
           link="View items"
-          onLinkClick={() => navigate("/admin/reports/stock")}
+          onLinkClick={() => navigate("/admin/products?status=" + encodeURIComponent("Low Stock"))}
         />
       </div>
 

@@ -72,8 +72,9 @@ const updateExpense = async (req, res) => {
         const updatedDesc = description !== undefined ? description : existingExpense.description;
         const updatedIsOther = is_other !== undefined ? (is_other ? 1 : 0) : existingExpense.is_other;
 
+        // Reset created_at to current timestamp on update
         await db.prepare(
-            'UPDATE expenses SET name = ?, amount = ?, description = ?, is_other = ? WHERE id = ?'
+            'UPDATE expenses SET name = ?, amount = ?, description = ?, is_other = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?'
         ).run(updatedName, updatedAmount, updatedDesc, updatedIsOther, id);
 
         return res.status(200).json({

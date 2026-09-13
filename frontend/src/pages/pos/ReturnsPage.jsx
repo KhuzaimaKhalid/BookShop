@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Receipt, RotateCcw, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Receipt, RotateCcw, AlertCircle, CheckCircle2, CheckSquare, Square } from "lucide-react";
 import api from "../../services/api";
 import POSHeader from "../../components/pos/POSHeader";
 import CategorySidebar from "../../components/pos/CategorySidebar";
@@ -147,6 +147,20 @@ const ReturnsPage = () => {
   const calculateTotalRefund = () =>
     returnItems.reduce((sum, item) => sum + item.returnQty * item.price, 0);
 
+  const isAllSelected =
+    returnItems.length > 0 &&
+    returnItems.every((item) => Number(item.returnQty) === Number(item.qty));
+
+  const handleSelectAllToggle = () => {
+    const targetState = !isAllSelected;
+    setReturnItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        returnQty: targetState ? item.qty : 0,
+      }))
+    );
+  };
+
   return (
     <div className="h-screen w-full bg-[#F8F9FA] flex flex-col overflow-hidden">
       <POSHeader searchTerm={searchTerm} onSearchChange={setSearchTerm} showDashboardLink={true} />
@@ -216,9 +230,23 @@ const ReturnsPage = () => {
                     Original Subtotal: Rs. {Number(invoiceData.subtotal).toLocaleString()}
                   </p>
                 </div>
-                <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">
-                  Verified Invoice
-                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllToggle}
+                    className="flex items-center gap-2 text-xs font-bold text-[#CD051F] hover:text-[#b0041a] transition bg-red-50 hover:bg-red-100 px-3.5 py-1.5 rounded-full"
+                  >
+                    {isAllSelected ? (
+                      <CheckSquare size={14} />
+                    ) : (
+                      <Square size={14} />
+                    )}
+                    {isAllSelected ? "Deselect All" : "Select All"}
+                  </button>
+                  <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">
+                    Verified Invoice
+                  </span>
+                </div>
               </div>
 
               {/* Items Table */}

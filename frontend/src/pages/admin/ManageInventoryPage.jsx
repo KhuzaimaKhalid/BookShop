@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom"; // Added useSearchParams
 import { Search, Plus, SquarePen, Trash2, Pencil, X } from "lucide-react";
 import api from "../../services/api";
 import AdminLayout from "../../components/layout/AdminLayout";
@@ -8,15 +8,23 @@ import EditPageModal from "./EditPageModal";
 import AddCategoryModal from "./AddCategoryModal";
 import EditCategoryModal from "./EditCategoryModal";
 
-const STATUS_OPTIONS = ["All Status", "Active", "Inactive", "Out of Stock"];
+const STATUS_OPTIONS = ["All Status", "Active", "Low Stock", "Out of Stock"];
 
 const getDisplayStatus = (product) => {
-    if (Number(product.stock_quantity) <= 0) return "Out of Stock";
-    return product.status || "Active";
+    const qty = Number(product.stock_quantity) || 0;
+    const minLevel = Number(product.min_stock_level) || 5;
+
+    if (qty <= 0) return "Out of Stock";
+    if (qty <= minLevel) return "Low Stock";
+    return "Active";
 };
 
 const ManageInventoryPage = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+
+    // Read initial status from URL query param if present
+    const initialStatus = searchParams.get("status") || "All Status";
 
     const [pages, setPages] = useState([]);
     const [categories, setCategories] = useState([]);
@@ -35,7 +43,14 @@ const ManageInventoryPage = () => {
     const [deleting, setDeleting] = useState(false);
 
     const [search, setSearch] = useState("");
-    const [statusFilter, setStatusFilter] = useState("All Status");
+    const [statusFilter, setStatusFilter] = useState(initialStatus);
+
+    useEffect(() => {
+        const paramStatus = searchParams.get("status");
+        if (paramStatus) {
+            setStatusFilter(paramStatus);
+        }
+    }, [searchParams]);
 
     useEffect(() => {
         const fetchAll = async () => {
@@ -90,25 +105,28 @@ const ManageInventoryPage = () => {
 
     const filteredProducts = useMemo(() => {
         return products.filter((p) => {
-            let matchesCategory = false;
-
-            if (selectedCategoryId) {
-                matchesCategory = String(p.category_id) === String(selectedCategoryId);
-            } else if (categoriesForSelectedPage.length > 0) {
-                matchesCategory = categoriesForSelectedPage.some(
-                    (c) => String(c.id) === String(p.category_id)
-                );
-            } else {
-                matchesCategory = true;
-            }
-
-            const matchesSearch = p.name ? p.name.toLowerCase().includes(search.toLowerCase()) : true;
-            const displayStatus = getDisplayStatus(p);
-            const matchesStatus = statusFilter === "All Status" || displayStatus === statusFilter;
-
-            return matchesCategory && matchesSearch && matchesStatus;
+          let matchesCategory = false;
+      
+          // Bypasses category restrictions when status filter is selected
+          if (statusFilter !== "All Status") {
+            matchesCategory = true;
+          } else if (selectedCategoryId) {
+            matchesCategory = String(p.category_id) === String(selectedCategoryId);
+          } else if (categoriesForSelectedPage.length > 0) {
+            matchesCategory = categoriesForSelectedPage.some(
+              (c) => String(c.id) === String(p.category_id)
+            );
+          } else {
+            matchesCategory = true;
+          }
+      
+          const matchesSearch = p.name ? p.name.toLowerCase().includes(search.toLowerCase()) : true;
+          const displayStatus = getDisplayStatus(p);
+          const matchesStatus = statusFilter === "All Status" || displayStatus === statusFilter;
+      
+          return matchesCategory && matchesSearch && matchesStatus;
         });
-    }, [products, selectedCategoryId, categoriesForSelectedPage, search, statusFilter]);
+      }, [products, selectedCategoryId, categoriesForSelectedPage, search, statusFilter]);
 
     const handlePageAdded = (newPage) => {
         setPages((prev) => [...prev, newPage]);
@@ -336,9 +354,9 @@ const ManageInventoryPage = () => {
                                     const statusStyle =
                                         displayStatus === "Out of Stock"
                                             ? "bg-slate-200 text-slate-600"
-                                            : displayStatus === "Active"
-                                                ? "bg-green-100 text-green-700"
-                                                : "bg-red-100 text-red-600";
+                                            : displayStatus === "Low Stock"
+                                                ? "bg-amber-100 text-amber-700 border border-amber-200"
+                                                : "bg-green-100 text-green-700";
 
                                     return (
                                         <tr
