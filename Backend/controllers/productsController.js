@@ -1,5 +1,42 @@
+const path = require('path');
+const fs = require('fs');
 const db = require('../config/connectDB');
-const { put, del } = require('@vercel/blob');
+const { app: electronApp } = require('electron');
+
+// Same baseDir logic as index.js and connectDB.js: userData when packaged,
+// local `backend/images` folder in dev. This lives at
+// local-server/backend/controllers/productsController.js, so `..` from here
+// is local-server/backend — matching index.js's dev baseDir.
+const baseDir = electronApp && electronApp.isPackaged
+    ? electronApp.getPath('userData')
+    : path.join(__dirname, '..');
+
+const PRODUCTS_DIR = path.join(baseDir, 'images', 'products');
+fs.mkdirSync(PRODUCTS_DIR, { recursive: true });
+
+// Saves a multer memory-storage file to disk and returns the relative URL
+// that index.js's `app.use("/images", express.static(imagesDir))` serves.
+function saveProductImage(file) {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const filename = `${Date.now()}-${safeName}`;
+    fs.writeFileSync(path.join(PRODUCTS_DIR, filename), file.buffer);
+    return `/images/products/${filename}`;
+}
+
+// Deletes a previously-saved local product image, ignoring anything that
+// isn't a local /images/products/... path (e.g. old Vercel URLs from before
+// the migration, or a missing image).
+function deleteProductImage(imageUrl) {
+    if (!imageUrl || !imageUrl.startsWith('/images/products/')) return;
+    const filePath = path.join(PRODUCTS_DIR, path.basename(imageUrl));
+    if (fs.existsSync(filePath)) {
+        try {
+            fs.unlinkSync(filePath);
+        } catch (err) {
+            console.error('Failed to delete old product image:', err.message);
+        }
+    }
+}
 
 const createProduct = async (req, res) => {
     try {
@@ -12,11 +49,7 @@ const createProduct = async (req, res) => {
       let imageUrl = null;
   
       if (req.file) {
-        const blob = await put(`products/${Date.now()}-${req.file.originalname}`, req.file.buffer, {
-          access: 'public',
-          token: process.env.BLOB_READ_WRITE_TOKEN
-        });
-        imageUrl = blob.url;
+        imageUrl = saveProductImage(req.file);
       }
   
       const sql = `
@@ -59,14 +92,8 @@ const updateProduct = async (req, res) => {
         }
         let imageUrl = existing.image;
         if (req.file) {
-            if (existing.image && existing.image.includes('public.blob.vercel-storage.com')) {
-                await del(existing.image);
-            }
-            const blob = await put(`products/${Date.now()}-${req.file.originalname}`, req.file.buffer, {
-                access: 'public',
-                token: process.env.BLOB_READ_WRITE_TOKEN
-            });
-            imageUrl = blob.url;
+            deleteProductImage(existing.image);
+            imageUrl = saveProductImage(req.file);
         }
         const sql = 'UPDATE products SET name = ?, image = ?, purchase_price = ?, selling_price = ?, stock_quantity = ?, min_stock_level = ?, status = ?, category_id = ? WHERE id = ?';
         await db.prepare(sql).run(name, imageUrl, purchase_price, selling_price, stock_quantity, min_stock_level, status, category_id, id);
