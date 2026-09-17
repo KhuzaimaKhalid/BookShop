@@ -58,12 +58,13 @@ const ReturnModal = ({ invoiceData, onClose, onSuccess }) => {
   }, 0);
 
   const handleSubmit = async () => {
+    // sale_items.id (returned as `id` by GET /return/invoice/:invoiceNo) —
+    // this is what the backend matches against, not product_id.
     const returnItems = items
       .filter((item) => item.returnQty > 0)
       .map((item) => ({
-        product_id: item.product_id || item.id,
-        quantity: item.returnQty,
-        price: item.price,
+        sale_item_id: item.id,
+        qty: item.returnQty,
       }));
 
     if (returnItems.length === 0) {
@@ -73,19 +74,19 @@ const ReturnModal = ({ invoiceData, onClose, onSuccess }) => {
 
     try {
       setSubmitting(true);
-      await api.post("/return", {
-        invoice_id: invoiceData.id,
-        invoice_no: invoiceData.invoice_no,
+      const res = await api.post("/return", {
+        sale_id: invoiceData.id,
         reason,
-        total_refund: totalRefund,
         items: returnItems,
       });
 
-      if (onSuccess) onSuccess();
+      // Original invoice is left untouched — hand the new return_id back
+      // up so the parent can open a separate Return Receipt for it.
+      if (onSuccess) onSuccess(res.data.return_id);
       onClose();
     } catch (error) {
       console.error("Error processing return:", error);
-      alert("Failed to process return. Please try again.");
+      alert(error.response?.data?.message || "Failed to process return. Please try again.");
     } finally {
       setSubmitting(false);
     }
