@@ -1,19 +1,41 @@
-const db = require('../config/connectDB');
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
+const db = require('../config/connectDB');
+const { app: electronApp } = require('electron');
 
-const IMAGES_DIR = path.join(__dirname, '..', 'images', 'products');
+// Same baseDir logic as index.js and connectDB.js: userData when packaged,
+// local `backend/images` folder in dev. This lives at
+// local-server/backend/controllers/productsController.js, so `..` from here
+// is local-server/backend — matching index.js's dev baseDir.
+const baseDir = electronApp && electronApp.isPackaged
+    ? electronApp.getPath('userData')
+    : path.join(__dirname, '..');
 
-function saveImageFile(file) {
-    const filename = `${Date.now()}-${file.originalname}`;
-    fs.writeFileSync(path.join(IMAGES_DIR, filename), file.buffer);
-    return filename;
+const PRODUCTS_DIR = path.join(baseDir, 'images', 'products');
+fs.mkdirSync(PRODUCTS_DIR, { recursive: true });
+
+// Saves a multer memory-storage file to disk and returns the relative URL
+// that index.js's `app.use("/images", express.static(imagesDir))` serves.
+function saveProductImage(file) {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const filename = `${Date.now()}-${safeName}`;
+    fs.writeFileSync(path.join(PRODUCTS_DIR, filename), file.buffer);
+    return `/images/products/${filename}`;
 }
 
-function deleteImageFile(filename) {
-    if (!filename) return;
-    const filePath = path.join(IMAGES_DIR, filename);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+// Deletes a previously-saved local product image, ignoring anything that
+// isn't a local /images/products/... path (e.g. old Vercel URLs from before
+// the migration, or a missing image).
+function deleteProductImage(imageUrl) {
+    if (!imageUrl || !imageUrl.startsWith('/images/products/')) return;
+    const filePath = path.join(PRODUCTS_DIR, path.basename(imageUrl));
+    if (fs.existsSync(filePath)) {
+        try {
+            fs.unlinkSync(filePath);
+        } catch (err) {
+            console.error('Failed to delete old product image:', err.message);
+        }
+    }
 }
 
 const createProduct = async (req, res) => {
@@ -24,9 +46,10 @@ const createProduct = async (req, res) => {
         return res.status(400).json({ message: "Required fields are missing" });
       }
   
-      let imageFilename = null;
+      let imageUrl = null;
+  
       if (req.file) {
-        imageFilename = saveImageFile(req.file);
+        imageUrl = saveProductImage(req.file);
       }
   
       const sql = `
@@ -37,7 +60,7 @@ const createProduct = async (req, res) => {
       const info = await db.prepare(sql).run(
         category_id || null,
         name,
-        imageFilename,
+        imageUrl,
         purchase_price,
         selling_price,
         stock_quantity,
@@ -48,7 +71,7 @@ const createProduct = async (req, res) => {
       return res.status(201).json({
         message: "Product created successfully",
         productId: Number(info.lastInsertRowid),
-        image: imageFilename
+        image: imageUrl
       });
     } catch (error) {
       console.error(error);
@@ -67,14 +90,14 @@ const updateProduct = async (req, res) => {
         if (!existing) {
             return res.status(404).json({ message: "Product not found" });
         }
-        let imageFilename = existing.image;
+        let imageUrl = existing.image;
         if (req.file) {
-            deleteImageFile(existing.image);
-            imageFilename = saveImageFile(req.file);
+            deleteProductImage(existing.image);
+            imageUrl = saveProductImage(req.file);
         }
         const sql = 'UPDATE products SET name = ?, image = ?, purchase_price = ?, selling_price = ?, stock_quantity = ?, min_stock_level = ?, status = ?, category_id = ? WHERE id = ?';
-        await db.prepare(sql).run(name, imageFilename, purchase_price, selling_price, stock_quantity, min_stock_level, status, category_id, id);
-        return res.status(200).json({ message: "Product updated successfully", image: imageFilename });
+        await db.prepare(sql).run(name, imageUrl, purchase_price, selling_price, stock_quantity, min_stock_level, status, category_id, id);
+        return res.status(200).json({ message: "Product updated successfully", image: imageUrl });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: "Server error" });
@@ -101,6 +124,7 @@ const deleteProduct = async (req, res) => {
 
 const getAllProducts = async (req, res) => {
     try {
+        // Only return products whose associated category is not soft-deleted
         const sql = `
             SELECT p.* 
             FROM products p

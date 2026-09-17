@@ -2,17 +2,19 @@ const db = require('../config/connectDB');
 
 const createCourse = async (req, res) => {
     try {
-        const { title } = req.body;
+        const { title, package_id } = req.body;
 
         if (!title) {
             return res.status(400).json({ message: "Please provide all required fields" });
         }
 
-        const result = await db.prepare('INSERT INTO course (title) VALUES (?)').run(title);
+        const result = await db.prepare(
+            'INSERT INTO course (title, package_id) VALUES (?, ?)'
+        ).run(title, package_id || null);
 
         return res.status(201).json({
             message: "Course created successfully", 
-            course: { course_id: Number(result.lastInsertRowid), title }
+            course: { course_id: Number(result.lastInsertRowid), title, package_id: package_id || null }
         });
     } catch (error) {
         console.error(error);

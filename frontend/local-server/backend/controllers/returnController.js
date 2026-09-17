@@ -183,6 +183,7 @@ const createReturn = async (req, res) => {
         `).run(totalRefund, returnId);
 
         return {
+            return_id: returnId,
             return_no: returnNo,
             total_refund: totalRefund
         };
