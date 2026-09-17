@@ -16,6 +16,7 @@ const businessRoutes = require("./routes/businessRoutes");
 const courseRoutes = require('./routes/courseRoutes.js');
 const expenseRoutes = require('./routes/expenseRouter.js');
 const stationaryRoutes = require('./routes/stationaryRoutes.js');
+const packageRoutes = require('./routes/packageRoutes.js');
 
 
 app.use(cors())
@@ -54,6 +55,9 @@ app.use('/expenses', expenseRoutes);
 
 app.use("/api/stationary", stationaryRoutes);
 app.use("/stationary", stationaryRoutes);
+
+app.use("/api/packages", packageRoutes);
+app.use("/packages", packageRoutes);
 
 const PORT = process.env.PORT
 
