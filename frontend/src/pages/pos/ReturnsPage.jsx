@@ -1,9 +1,21 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Receipt, RotateCcw, AlertCircle, CheckCircle2, CheckSquare, Square } from "lucide-react";
+import {
+  Receipt,
+  RotateCcw,
+  AlertCircle,
+  CheckCircle2,
+  CheckSquare,
+  Square,
+  List,
+  Eye,
+  X,
+  Search,
+} from "lucide-react";
 import api from "../../services/api";
 import POSHeader from "../../components/pos/POSHeader";
 import CategorySidebar from "../../components/pos/CategorySidebar";
+import ReturnInvoiceModal from "../../components/sales/ReturnInvoiceModal";
 
 const ReturnsPage = () => {
   const navigate = useNavigate();
@@ -23,6 +35,13 @@ const ReturnsPage = () => {
 
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  // States for Returns List Modal & Return Invoice Preview
+  const [showReturnsModal, setShowReturnsModal] = useState(false);
+  const [returnsList, setReturnsList] = useState([]);
+  const [modalSearchTerm, setModalSearchTerm] = useState("");
+  const [loadingReturns, setLoadingReturns] = useState(false);
+  const [selectedReturnId, setSelectedReturnId] = useState(null);
 
   useEffect(() => {
     const fetchCategoriesAndPages = async () => {
@@ -64,7 +83,46 @@ const ReturnsPage = () => {
     });
   }, [categories, selectedPageId]);
 
-  // 1. Fetch Invoice Details from Backend
+  // Fetch all processed returns for modal
+  const fetchReturnsList = async () => {
+    setLoadingReturns(true);
+    try {
+      const res = await api.get("/return");
+      setReturnsList(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error("Error fetching returns list:", err);
+    } finally {
+      setLoadingReturns(false);
+    }
+  };
+
+  const handleOpenReturnsModal = () => {
+    setShowReturnsModal(true);
+    setModalSearchTerm("");
+    fetchReturnsList();
+  };
+
+  // Filter returns based on search input
+  const filteredReturnsList = useMemo(() => {
+    if (!modalSearchTerm.trim()) return returnsList;
+    const term = modalSearchTerm.toLowerCase();
+    return returnsList.filter(
+      (ret) =>
+        ret.return_no?.toLowerCase().includes(term) ||
+        ret.invoice_no?.toLowerCase().includes(term) ||
+        ret.reason?.toLowerCase().includes(term)
+    );
+  }, [returnsList, modalSearchTerm]);
+
+  // Total calculated refund of filtered returns
+  const grandTotalRefund = useMemo(() => {
+    return filteredReturnsList.reduce(
+      (sum, ret) => sum + (Number(ret.total_refund) || 0),
+      0
+    );
+  }, [filteredReturnsList]);
+
+  // Fetch Invoice Details from Backend
   const handleLoadInvoice = async (e) => {
     e?.preventDefault();
     if (!invoiceNoInput.trim()) return;
@@ -79,7 +137,6 @@ const ReturnsPage = () => {
       const res = await api.get(`/return/invoice/${invoiceNoInput.trim()}`);
       setInvoiceData(res.data.invoice);
       
-      // Initialize return quantities to 0 for each item
       const initializedItems = (res.data.items || []).map((item) => ({
         ...item,
         returnQty: 0,
@@ -92,7 +149,6 @@ const ReturnsPage = () => {
     }
   };
 
-  // 2. Adjust Return Quantities
   const handleQtyChange = (saleItemId, newQty, maxQty) => {
     const safeQty = Math.max(0, Math.min(Number(newQty) || 0, maxQty));
     setReturnItems((prev) =>
@@ -100,7 +156,6 @@ const ReturnsPage = () => {
     );
   };
 
-  // 3. Process Return Request
   const handleProcessReturn = async () => {
     const selectedItems = returnItems
       .filter((i) => i.returnQty > 0)
@@ -108,31 +163,32 @@ const ReturnsPage = () => {
         sale_item_id: i.id,
         qty: i.returnQty,
       }));
-
+  
     if (selectedItems.length === 0) {
       setErrorMessage("Please select at least one item quantity to return.");
       return;
     }
-
+  
     setSubmitting(true);
     setErrorMessage("");
     setSuccessMessage("");
-
+  
     try {
       const payload = {
         sale_id: invoiceData.id,
         reason: reason || "Customer Return",
         items: selectedItems,
       };
-
+  
+      // Pass payload as the second argument
       const res = await api.post("/return", payload);
+  
       setSuccessMessage(
         `Return ${res.data.return_no} processed successfully! Total Refund: Rs. ${Number(
           res.data.total_refund
         ).toLocaleString()}`
       );
-
-      // Reset state
+  
       setInvoiceData(null);
       setReturnItems([]);
       setReason("");
@@ -178,10 +234,10 @@ const ReturnsPage = () => {
         <main className="flex-1 p-8 flex flex-col gap-6 overflow-y-auto">
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">RETURN</h1>
 
-          {/* Search Box Card */}
+          {/* Search Box Card + View Returns Button */}
           <form
             onSubmit={handleLoadInvoice}
-            className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex items-center gap-4 max-w-2xl"
+            className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex items-center gap-4 max-w-3xl"
           >
             <div className="flex items-center gap-2 text-slate-800 font-bold text-sm shrink-0">
               <Receipt size={22} />
@@ -202,6 +258,15 @@ const ReturnsPage = () => {
               className="bg-[#CD051F] hover:bg-red-700 text-white font-bold text-sm px-6 py-2.5 rounded-lg transition shrink-0 disabled:opacity-50"
             >
               {loadingInvoice ? "Loading..." : "Load Invoice"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenReturnsModal}
+              className="flex items-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-sm px-4 py-2.5 rounded-lg transition shrink-0"
+            >
+              <List size={18} />
+              <span>View Returns</span>
             </button>
           </form>
 
@@ -323,6 +388,106 @@ const ReturnsPage = () => {
           )}
         </main>
       </div>
+
+      {/* All Processed Returns Modal */}
+      {showReturnsModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
+            {/* Modal Header & Search Bar */}
+            <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 shrink-0">
+                <List size={20} className="text-[#CD051F]" />
+                All Processed Returns
+              </h2>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-64">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={modalSearchTerm}
+                    onChange={(e) => setModalSearchTerm(e.target.value)}
+                    placeholder="Search return/invoice/reason..."
+                    className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-[#CD051F]"
+                  />
+                </div>
+
+                <button
+                  onClick={() => setShowReturnsModal(false)}
+                  className="text-slate-400 hover:text-slate-600 transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto flex-1">
+              {loadingReturns ? (
+                <p className="text-center text-slate-400 py-8 text-sm">Loading returns...</p>
+              ) : filteredReturnsList.length === 0 ? (
+                <p className="text-center text-slate-400 py-8 text-sm">No processed returns found.</p>
+              ) : (
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="text-xs font-bold text-slate-400 uppercase border-b border-slate-200 pb-2">
+                      <th className="pb-3 w-1/5">Return No</th>
+                      <th className="pb-3 w-1/4">Invoice No</th>
+                      <th className="pb-3 w-1/5 text-right pr-4">Total Refund</th>
+                      <th className="pb-3 w-1/4">Reason</th>
+                      <th className="pb-3 w-16 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredReturnsList.map((ret) => (
+                      <tr key={ret.id} className="hover:bg-slate-50 text-slate-800 font-semibold">
+                        <td className="py-3">{ret.return_no}</td>
+                        <td className="py-3">{ret.invoice_no}</td>
+                        <td className="py-3 text-right pr-4 text-[#CD051F] font-bold">
+                          Rs. {Number(ret.total_refund).toLocaleString()}
+                        </td>
+                        <td className="py-3 text-slate-500 font-normal truncate max-w-[180px]">
+                          {ret.reason || "-"}
+                        </td>
+                        <td className="py-3 text-center">
+                          <button
+                            onClick={() => setSelectedReturnId(ret.id)}
+                            title="View Invoice"
+                            className="p-1.5 text-slate-600 hover:text-[#CD051F] hover:bg-red-50 rounded-lg transition inline-flex items-center justify-center"
+                          >
+                            <Eye size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Modal Footer Summary */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+              <span className="text-xs font-bold text-slate-500 uppercase">
+                Showing {filteredReturnsList.length} Return(s)
+              </span>
+              <div className="text-right">
+                <span className="text-xs text-slate-400 font-bold uppercase mr-3">Total Refund Amount:</span>
+                <span className="text-lg font-black text-[#CD051F]">
+                  Rs. {grandTotalRefund.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Return Invoice Printable Receipt Modal */}
+      {selectedReturnId && (
+        <ReturnInvoiceModal
+          returnId={selectedReturnId}
+          onClose={() => setSelectedReturnId(null)}
+        />
+      )}
     </div>
   );
 };
