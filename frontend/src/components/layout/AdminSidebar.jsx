@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import {
   LayoutGrid,
   Package,
+  Boxes,
   ShoppingCart,
   ClipboardList,
   Receipt,
@@ -13,7 +14,7 @@ import {
 import api from "../../services/api";
 import defaultLogo from "../../assets/book.png";
 
-const navItems = [
+const staticNavItems = [
   { label: "Dashboard", icon: LayoutGrid, path: "/admin/dashboard" },
   { label: "Manage Inventory", icon: Package, path: "/admin/products" },
   {
@@ -47,6 +48,7 @@ const AdminSidebar = ({ mobileOpen, onClose }) => {
   const [expanded, setExpanded] = useState({});
   const [businessLogo, setBusinessLogo] = useState("");
   const [businessName, setBusinessName] = useState("");
+  const [packages, setPackages] = useState([]);
 
   useEffect(() => {
     const fetchBusinessLogo = async () => {
@@ -72,6 +74,36 @@ const AdminSidebar = ({ mobileOpen, onClose }) => {
   }, []);
 
   useEffect(() => {
+    const fetchPackages = async () => {
+      try {
+        const res = await api.get("/packages");
+        const fetchedPackages = Array.isArray(res.data?.packages) ? res.data.packages : [];
+        setPackages(fetchedPackages);
+      } catch (err) {
+        console.error("Error loading packages in sidebar:", err);
+      }
+    };
+
+    fetchPackages();
+  }, [location.pathname]);
+
+  // Build the full nav list: static items + Course (admin) + Packages (dynamic children)
+  const navItems = [
+    ...staticNavItems.slice(0, 2),
+    { label: "Courses", icon: Boxes, path: "/admin/courses" },
+    {
+      label: "Packages",
+      icon: Boxes,
+      path: "/admin/packages",
+      children: packages.map((pkg) => ({
+        label: pkg.title,
+        path: `/admin/packages/${pkg.package_id}`,
+      })),
+    },
+    ...staticNavItems.slice(2),
+  ];
+
+  useEffect(() => {
     const next = {};
     navItems.forEach((item) => {
       if (item.children) {
@@ -82,7 +114,8 @@ const AdminSidebar = ({ mobileOpen, onClose }) => {
       }
     });
     setExpanded((prev) => ({ ...prev, ...next }));
-  }, [location.pathname]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, packages]);
 
   const toggleExpand = (label) => {
     setExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
@@ -100,9 +133,8 @@ const AdminSidebar = ({ mobileOpen, onClose }) => {
 
       {/* Sidebar Panel */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-[#151B26] flex flex-col justify-between py-6 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-[#151B26] flex flex-col justify-between py-6 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         {/* Mobile Header with Close Button */}
         <div className="flex items-center justify-between px-4 mb-2 lg:hidden">
@@ -129,11 +161,10 @@ const AdminSidebar = ({ mobileOpen, onClose }) => {
                   key={label}
                   to={path}
                   onClick={onClose}
-                  className={`flex items-center gap-3.5 px-4 py-3 rounded-lg text-sm font-semibold transition ${
-                    isParentActive
+                  className={`flex items-center gap-3.5 px-4 py-3 rounded-lg text-sm font-semibold transition ${isParentActive
                       ? "bg-[#CD051F] text-white shadow-md"
                       : "text-slate-300 hover:bg-white/5 hover:text-white"
-                  }`}
+                    }`}
                 >
                   <Icon size={20} strokeWidth={2} />
                   <span>{label}</span>
@@ -141,24 +172,30 @@ const AdminSidebar = ({ mobileOpen, onClose }) => {
               );
             }
 
+            const hasChildren = children.length > 0;
+
             return (
               <div key={label} className="flex flex-col">
                 <button
                   onClick={() => {
                     toggleExpand(label);
-                    navigate(path);
+                    navigate(path); // Allow navigation for Packages as well
                   }}
-                  className={`flex items-center gap-3.5 px-4 py-3 rounded-lg text-sm font-semibold transition w-full text-left ${
-                    isParentActive
+                  className={`flex items-center gap-3.5 px-4 py-3 rounded-lg text-sm font-semibold transition w-full text-left ${isParentActive
                       ? "bg-[#CD051F] text-white shadow-md"
                       : "text-slate-300 hover:bg-white/5 hover:text-white"
-                  }`}
+                    }`}
                 >
                   <Icon size={20} strokeWidth={2} />
                   <span>{label}</span>
+                  {label === "Packages" && !hasChildren && (
+                    <span className="ml-auto text-[10px] text-slate-500 font-normal">
+                      None yet
+                    </span>
+                  )}
                 </button>
 
-                {isOpen && (
+                {isOpen && hasChildren && (
                   <div className="mt-1 ml-5 pl-4 border-l border-white/10 flex flex-col gap-1">
                     {children.map((child) => {
                       const isChildActive = location.pathname === child.path;
@@ -167,14 +204,12 @@ const AdminSidebar = ({ mobileOpen, onClose }) => {
                           key={child.path}
                           to={child.path}
                           onClick={onClose}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-xs font-medium transition ${
-                            isChildActive ? "text-white" : "text-slate-400 hover:text-white"
-                          }`}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-xs font-medium transition ${isChildActive ? "text-white" : "text-slate-400 hover:text-white"
+                            }`}
                         >
                           <span
-                            className={`w-1.5 h-1.5 rounded-full shrink-0 transition ${
-                              isChildActive ? "bg-[#CD051F]" : "bg-slate-500"
-                            }`}
+                            className={`w-1.5 h-1.5 rounded-full shrink-0 transition ${isChildActive ? "bg-[#CD051F]" : "bg-slate-500"
+                              }`}
                           />
                           {child.label}
                         </NavLink>
