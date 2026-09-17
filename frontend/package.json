@@ -23,48 +23,49 @@
     "dist": "npm run build && electron-builder --win -c.npmRebuild=false"
   },
   "build": {
-  "appId": "com.trustnexus.shahidbookdepot",
-  "productName": "Shahid Book Depot",
-  "copyright": "Copyright © 2026 Trust Nexus / Khuzaima Khalid",
-  "files": [
-    "dist/**/*",
-    "src/assets/**/*",
-    "main.js",
-    "preload.cjs",
-    "local-server/**/*",
-    "package.json"
-  ],
-  "asarUnpack": [
-    "**/node_modules/better-sqlite3/**"
-  ],
-  "directories": {
-    "output": "dist-release"
-  },
-  "win": {
-    "target": "nsis",
-    "publisherName": "Trust Nexus",
-    "icon": "src/assets/logo.ico"
-  },
-  "extraResources": [
-    {
-      "from": ".env",
-      "to": ".env"
+    "appId": "com.trustnexus.shahidbookdepot",
+    "productName": "Shahid Book Depot",
+    "copyright": "Copyright © 2026 Trust Nexus / Khuzaima Khalid",
+    "files": [
+      "dist/**/*",
+      "src/assets/**/*",
+      "main.js",
+      "preload.cjs",
+      "local-server/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "directories": {
+      "output": "dist-release"
     },
-    {
-      "from": "../Backend/BookShop.db",
-      "to": "BookShop.db"
+    "win": {
+      "target": "nsis",
+      "publisherName": "Trust Nexus",
+      "icon": "src/assets/logo.ico"
+    },
+    "extraResources": [
+      {
+        "from": ".env",
+        "to": ".env"
+      },
+      {
+        "from": "../Backend/BookShop.db",
+        "to": "BookShop.db"
+      }
+    ],
+    "nsis": {
+      "installerIcon": "src/assets/logo.ico",
+      "uninstallerIcon": "src/assets/logo.ico",
+      "uninstallDisplayName": "Shahid Book Depot",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
-  ],
-  "nsis": {
-    "installerIcon": "src/assets/logo.ico",
-    "uninstallerIcon": "src/assets/logo.ico",
-    "uninstallDisplayName": "Shahid Book Depot",
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true
-  }
-},
+  },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@vercel/blob": "^2.8.0",
     "axios": "^1.18.1",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.3",
