@@ -19,6 +19,20 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
+  // Listen for forced logouts triggered by api.js's 401 interceptor.
+  // We clear state here instead of letting api.js do a hard
+  // window.location.href navigation, which breaks under file:// in
+  // the packaged Electron app (it resolves "/login" as a filesystem
+  // path instead of a client-side route).
+  useEffect(() => {
+    const handleForcedLogout = () => {
+      setToken(null);
+      setUser(null);
+    };
+    window.addEventListener("auth:logout", handleForcedLogout);
+    return () => window.removeEventListener("auth:logout", handleForcedLogout);
+  }, []);
+
   const login = async (email, password) => {
     const data = await authService.login(email, password);
     // Backend returns status: "success" | "failed"
