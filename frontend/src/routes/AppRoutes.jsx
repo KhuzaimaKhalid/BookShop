@@ -25,6 +25,9 @@ import ExpensePage from "../pages/pos/ExpensePage";
 import POSReturnsPage from "../pages/pos/ReturnsPage";
 import AdminExpenses from "../pages/admin/AdminExpenses";
 import ExpenseReportPage from "../pages/admin/ExpenseReportPage";
+import AdminCourse from "../pages/admin/AdminCourse";
+import PackageDetailPage from "../pages/admin/PackageDetailPage";
+import AdminPackage from "../pages/admin/AdminPackage";
 
 const AppRoutes = () => {
   return (
@@ -74,6 +77,9 @@ const AppRoutes = () => {
       <Route path="/admin/expenses" element={<AdminExpenses />} />
       <Route path="/admin/reports/expense" element={<ExpenseReportPage />} />
       <Route path="/admin/user" element={<UserProfilePage />} />
+      <Route path="/admin/courses" element={<AdminCourse />} />
+      <Route path="/admin/packages/:id" element={<PackageDetailPage />} />
+      <Route path="/admin/packages" element={<AdminPackage />} />
 
       {/* Auth Pages */}
       <Route path="/login" element={<LoginPage />} />
