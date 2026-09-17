@@ -2,17 +2,19 @@ const db = require('../config/connectDB');
 
 const createStationary = async (req, res) => {
     try {
-        const { title } = req.body;
+        const { title, package_id } = req.body;
 
         if (!title) {
             return res.status(400).json({ message: "Please provide all required fields" });
         }
 
-        const result = await db.prepare('INSERT INTO stationary (title) VALUES (?)').run(title);
+        const result = await db.prepare(
+            'INSERT INTO stationary (title, package_id) VALUES (?, ?)'
+        ).run(title, package_id || null);
 
         return res.status(201).json({
             message: "Stationery package created successfully", 
-            stationary: { stationary_id: Number(result.lastInsertRowid), title }
+            stationary: { stationary_id: Number(result.lastInsertRowid), title, package_id: package_id || null }
         });
     } catch (error) {
         console.error(error);
